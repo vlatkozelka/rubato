@@ -1,0 +1,43 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:1234/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-lm-studio}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5-14b-instruct}
+      - POSTGRES_DSN=${POSTGRES_DSN:-postgresql://rubato:rubato@db:5432/rubato}
+    extra_hosts:
+      # Lets the container reach LM Studio running on the host machine.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./app:/srv/app
+      - ./data:/srv/data
+      - ./docs:/srv/docs
+    depends_on: []
+    # depends_on:
+    #   - db
+
+  # --- Uncomment starting Phase 4 (pgvector) ---
+  # db:
+  #   image: pgvector/pgvector:pg16
+  #   environment:
+  #     - POSTGRES_USER=rubato
+  #     - POSTGRES_PASSWORD=rubato
+  #     - POSTGRES_DB=rubato
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - rubato_pgdata:/var/lib/postgresql/data
+
+  # --- Uncomment starting Phase 11 (tracing) ---
+  # langfuse:
+  #   image: langfuse/langfuse:2
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - db
+
+# volumes:
+#   rubato_pgdata:

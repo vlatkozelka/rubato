@@ -1,0 +1,8 @@
+[
+  {"id": "cust_001", "name": "Dana Whitfield", "email": "dana.whitfield@example.com", "tier": "standard"},
+  {"id": "cust_002", "name": "Marcus Ito", "email": "marcus.ito@example.com", "tier": "vip"},
+  {"id": "cust_003", "name": "Priya Nair", "email": "priya.nair@example.com", "tier": "standard"},
+  {"id": "cust_004", "name": "Sofia Beltran", "email": "sofia.beltran@example.com", "tier": "standard"},
+  {"id": "cust_005", "name": "Tomas Weber", "email": "tomas.weber@example.com", "tier": "vip"},
+  {"id": "cust_006", "name": "Lena Farrow", "email": "lena.farrow@example.com", "tier": "standard"}
+]

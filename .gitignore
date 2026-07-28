@@ -1,0 +1,56 @@
+# --- Internal planning doc, not for public repo ---
+PLAN.md
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.Python
+build/
+dist/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- IDE ---
+.idea/
+.vscode/
+*.iml
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+
+# --- Testing / coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Jupyter (used later for retrieval/eval experiments) ---
+.ipynb_checkpoints/
+
+# --- Docker volumes / local data mounts ---
+pgdata/
+langfuse_data/
+
+# --- Model + embedding caches (bge-m3, reranker, LoRA checkpoints) ---
+.cache/
+*.safetensors
+models/
+checkpoints/
+
+# --- Logs and local traces (JSONL tracing fallback) ---
+*.log
+traces/*.jsonl
+
+# --- Eval run artifacts (keep scorecards, drop raw run dumps) ---
+eval_runs/
