@@ -56,7 +56,84 @@ enforced at generation time rather than hoped-for. `Mode.MD_JSON` is worth
 keeping in mind as the universal fallback for any future backend that
 doesn't support schema-constrained decoding at all.
 
----
+
+## Phase 2 — Composite vs. complex_case
+
+**Decision:** Split what was originally one vague "complex_case" escape
+hatch into two distinct intents: `composite` (multiple KNOWN, independent
+asks in one message) and `complex_case` (the resolution path is genuinely
+unknowable without looking up facts first).
+
+**Why:** initial testing showed a message like "where's my order, and
+what's your return policy?" landing on a single intent lost information —
+there was no way for the router to know two separate, answerable questions
+were both present. But conflating that with the canonical complex case
+(broken zipper + prior return + "what can you do?") would have been wrong
+in the other direction: that case has no fixed list of sub-intents to
+report, since the correct resolution only emerges after checking order
+history, return history, and stock. Forcing both into one bucket would
+have made `composite` meaningless (sometimes populated, sometimes not) and
+kept `complex_case` doing double duty as both "genuinely unknown" and
+"here's a known list, just go run it."
+
+**Conflict handling:** composite is only valid when sub-intents are
+independent. Introduced `ConflictingIntentPair` as an explicit, structured
+list (currently: refund_request + return_request — mutually exclusive
+resolutions for the same item) rather than describing conflicts only in
+prose. The system prompt is generated from this list at runtime, so
+conflict rules live in one place and can be reused by the eval suite later
+instead of only existing as unstructured prompt text.
+
+**Relevance to later phases:** this distinction gives a concrete, tested
+answer to interview question #8 (ReAct vs. plan-and-execute). `composite`
+requests are a natural fit for plan-and-execute — the full set of steps is
+already known up front (do X, do Y, merge). `complex_case` requests are the
+actual argument for ReAct, since the next step can't be planned until the
+previous one's result is known.
+
+**Also added:** a `chitchat` intent, after testing showed a bare "hey"
+being forced into `complex_case` — the enum had no correct answer for a
+message with zero support-related content, so the model picked the least
+appropriate option available. `chitchat` gets a generic redirect response,
+handled without invoking the agent loop.
+
+
+## Phase 2 — Composite/conflict design, kept as an experiment
+
+**Decision:** Built the advanced triage schema (composite intent + explicit
+conflict pairs) now, in Phase 2, rather than deferring it to Phase 13
+(model routing/optimization) as originally recommended.
+
+**Context:** the case against building this now was real — it's a routing
+optimization, not a correctness fix (unlike `chitchat`, which fixed an
+actual bug). Skipping it entirely and routing every multi-part or
+ambiguous message to `complex_case` would not have broken anything; the
+agent loop in Phase 9 can resolve those messages correctly on its own,
+just less efficiently. The risk of adding this later, as a pure addition
+to the schema, was assessed as low.
+
+**Why built anyway:** the working hypothesis is that real customer
+messages are messy and often genuinely multi-part often enough that
+letting all of it fall through to `complex_case` would waste a
+disproportionate number of requests on the expensive agent-loop path —
+not because the phrasing is unclear, but because customers frequently
+ask more than one thing per message. This is a genuine hypothesis, not
+a settled fact — the counter-argument (most traffic is single-intent
+once noise is stripped, and this is premature optimization on a
+hand-picked adversarial test set) is equally plausible and was not
+disproven, just deprioritized in favor of testing the hypothesis
+directly with a real design instead of arguing it further in the
+abstract.
+
+**This is being tracked as an experiment, not a proven best practice.**
+The real test comes in Phase 12 (evals): if the golden dataset shows
+composite/conflict cases are rare in realistic traffic, or that the
+extra schema complexity doesn't measurably reduce agent-loop
+invocations, this should be simplified back toward the binary
+complex/not-complex design — the added surface area (an extra intent,
+a nullable list field, a conflict-pair schema, extra few-shot examples)
+isn't worth carrying if it's not earning its keep. Revisit this
+decision once real accuracy/latency/cost numbers exist, not before.
 
 ## Open questions to answer as later phases land
 
