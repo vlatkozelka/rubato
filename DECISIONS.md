@@ -20,6 +20,44 @@ where this was going."
 
 ---
 
+
+## Phase 2 — Triage
+
+**Decision:** Use `instructor.Mode.JSON_SCHEMA` for structured triage output,
+not the library default (`Mode.TOOLS`) or `Mode.JSON`.
+
+**What happened:** `Mode.TOOLS` failed — LM Studio's server only supports the
+OpenAI spec's string-enum form of `tool_choice` ("auto"/"required"/"none"),
+not the object form that names a specific function, which is what instructor
+sends by default. `Mode.JSON` failed too — LM Studio's server only accepts
+`response_format.type` of `"json_schema"` or `"text"`, rejecting the looser
+`"json_object"` shape outright.
+
+`Mode.JSON_SCHEMA` and `Mode.MD_JSON` both worked, but not for the same
+reason. `JSON_SCHEMA` sends the actual schema to the server, which compiles
+it into a grammar and constrains token generation — the model structurally
+cannot emit invalid output. `MD_JSON` just prompts the model to wrap JSON in
+a code fence and parses it client-side with no server-side enforcement; it
+happened to work because the local model is instruction-following enough for
+a simple schema, not because anything guarantees it will.
+
+**Why this matters:** self-hosted inference servers (LM Studio/llama.cpp)
+implement a subset of the full OpenAI API surface, and that subset boundary
+is invisible until you hit it. A hosted API (OpenAI, Anthropic) would have
+accepted the default `Mode.TOOLS` call without complaint. This is a concrete
+answer to "why self-hosted here, and when would you switch to an API model"
+(interview question #11): local serving is free and private, but you inherit
+whatever gaps exist in that server's API compatibility, and you have to know
+enough to diagnose that rather than assume any OpenAI-shaped client "just
+works" against it.
+
+**Chosen:** `Mode.JSON_SCHEMA` as the primary mode going forward, since it's
+enforced at generation time rather than hoped-for. `Mode.MD_JSON` is worth
+keeping in mind as the universal fallback for any future backend that
+doesn't support schema-constrained decoding at all.
+
+---
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
