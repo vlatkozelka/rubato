@@ -15,21 +15,20 @@ services:
       - ./app:/srv/app
       - ./data:/srv/data
       - ./docs:/srv/docs
-    depends_on: []
-    # depends_on:
-    #   - db
+    depends_on:
+      - db
 
-  # --- Uncomment starting Phase 4 (pgvector) ---
-  # db:
-  #   image: pgvector/pgvector:pg16
-  #   environment:
-  #     - POSTGRES_USER=rubato
-  #     - POSTGRES_PASSWORD=rubato
-  #     - POSTGRES_DB=rubato
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - rubato_pgdata:/var/lib/postgresql/data
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=rubato
+      - POSTGRES_PASSWORD=rubato
+      - POSTGRES_DB=rubato
+    ports:
+      - "5432:5432"
+    volumes:
+      - rubato_pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
 
   # --- Uncomment starting Phase 11 (tracing) ---
   # langfuse:
@@ -39,5 +38,5 @@ services:
   #   depends_on:
   #     - db
 
-# volumes:
-#   rubato_pgdata:
+volumes:
+  rubato_pgdata:
