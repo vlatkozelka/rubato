@@ -45,7 +45,6 @@ langfuse_data/
 # --- Model + embedding caches (bge-m3, reranker, LoRA checkpoints) ---
 .cache/
 *.safetensors
-models/
 checkpoints/
 
 # --- Logs and local traces (JSONL tracing fallback) ---
