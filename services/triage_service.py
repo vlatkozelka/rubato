@@ -2,6 +2,7 @@ import instructor
 from openai import OpenAI
 
 from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+from models.intent import Intent
 from models.triage_result import TriageResult
 from models.conflicting_intent_pair import ConflictingIntentPair
 
@@ -12,8 +13,8 @@ client = instructor.from_openai(
 
 CONFLICTING_INTENT_PAIRS: list[ConflictingIntentPair] = [
     ConflictingIntentPair(
-        intent_a="refund_request",
-        intent_b="return_request",
+        intent_a=Intent.RETURN_REQUEST,
+        intent_b=Intent.REFUND_REQUEST,
         reason=(
             "Money back and a return-for-exchange/replacement are "
             "mutually exclusive resolutions for the same item — the "

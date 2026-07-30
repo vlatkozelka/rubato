@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from models.intent import Intent
+
 
 class ConflictingIntentPair(BaseModel):
     """
@@ -8,6 +10,6 @@ class ConflictingIntentPair(BaseModel):
     'complex_case', not 'composite' — the conflict requires reasoning
     (or clarification from the customer), not just running both handlers.
     """
-    intent_a: str
-    intent_b: str
+    intent_a: Intent
+    intent_b: Intent
     reason: str

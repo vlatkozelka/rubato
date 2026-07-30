@@ -1,27 +1,19 @@
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
+from models.intent import Intent
+
 SimpleIntent = Literal[
-    "order_status",
-    "policy_question",
-    "return_request",
-    "refund_request",
-    "price_check"
+    Intent.ORDER_STATUS,
+    Intent.POLICY_QUESTION,
+    Intent.RETURN_REQUEST,
+    Intent.REFUND_REQUEST,
+    Intent.PRICE_CHECK
 ]
 
 
 class TriageResult(BaseModel):
-    intent: Literal[
-        "order_status",
-        "policy_question",
-        "return_request",
-        "refund_request",
-        "price_check",
-        "escalate",
-        "chitchat",
-        "composite",
-        "complex_case",
-    ]
+    intent: Intent
     sub_intents: Optional[List[SimpleIntent]] = Field(
         default=None,
         description=(

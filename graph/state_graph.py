@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph
 
 from graph.nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node
 from models.conversation_state import ConversationState
+from models.intent import Intent
 
 graph = StateGraph(ConversationState)
 graph.add_node("triage", triage_node)
@@ -18,23 +19,23 @@ def traverse(state: ConversationState) -> str:
     else:
         match state.triage_result.intent:
 
-            case "order_status":
+            case Intent.ORDER_STATUS:
                 return "check_order_status"
-            case "policy_question":
+            case Intent.POLICY_QUESTION:
                 return "answer_policy_question"
-            case "return_request":
+            case Intent.RETURN_REQUEST:
                 return "handle_return_request"
-            case "refund_request":
+            case Intent.REFUND_REQUEST:
                 return "handle_refund_request"
-            case "price_check":
+            case Intent.PRICE_CHECK:
                 return "check_price"
-            case "escalate":
+            case Intent.ESCALATE:
                 return "assign_to_human"
-            case "chitchat":
+            case Intent.CHITCHAT:
                 return "greet"
-            case "composite":
+            case Intent.COMPOSITE:
                 return "handle_composite"
-            case "complex_case":
+            case Intent.COMPLEX_CASE:
                 return "process_complex_case"
 
 
