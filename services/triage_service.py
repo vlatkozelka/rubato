@@ -40,6 +40,7 @@ Intents:
 - policy_question: asking ABOUT a policy (windows, fees, rules) — a question, not a request to act.
 - return_request: asking to send an item back (for exchange, store credit, or as a step toward a refund).
 - refund_request: asking for money back to the original payment method.
+- price_check: asking the price, cost, or fee of a specific product — a question about cost, not about policy rules or an order.
 - escalate: asking for a human/manager, or saying the bot isn't helping.
 - chitchat: greetings, small talk, or messages with no support-related content.
 - composite: the message contains TWO OR MORE of [order_status, policy_question, return_request, refund_request], and they are INDEPENDENT — each resolves on its own without affecting the other.
@@ -79,6 +80,10 @@ Examples:
    -> complex_case, sub_intents empty
    (no second simple intent stated — resolution depends on facts not in the message: defect verification, return history, stock)
 
+7. "What's the price of the yoga mat, and can I return a jacket I bought 20 days ago?"
+   -> composite, sub_intents=[price_check, return_request]
+   (independent asks — a cost lookup and a return request, no conflict)
+   
 Always extract order_id and product_reference if present. Set sentiment from
 the customer's actual tone (neutral, frustrated, angry) — never let intent
 classification influence the sentiment field.

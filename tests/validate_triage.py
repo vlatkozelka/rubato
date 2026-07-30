@@ -92,6 +92,20 @@ test_cases = [
         "expected_order_id": None,
         "expected_sentiment": "neutral",
     },
+    {
+        "message": "How much does the yoga mat cost?",
+        "expected_intent": "price_check",
+        "expected_sub_intents": None,
+        "expected_order_id": None,
+        "expected_sentiment": "neutral",
+    },
+    {
+        "message": "What's the price of the wireless earbuds, and can I return the jacket I bought 20 days ago?",
+        "expected_intent": "composite",
+        "expected_sub_intents": ["price_check", "return_request"],
+        "expected_order_id": None,
+        "expected_sentiment": "neutral",
+    },
 ]
 
 
