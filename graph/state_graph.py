@@ -1,12 +1,13 @@
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 
-from graph.nodes import triage_node, check_order_status_node
+from graph.nodes import triage_node, check_order_status_node, check_price_node
 from models.conversation_state import ConversationState
 
 graph = StateGraph(ConversationState)
 graph.add_node("triage", triage_node)
 graph.add_node("check_order_status", check_order_status_node)
+graph.add_node("check_price", check_price_node)
 graph.set_entry_point("triage")
 
 
@@ -41,11 +42,11 @@ graph.add_conditional_edges(
     traverse,
     {
         "check_order_status": "check_order_status",
+        "check_price": "check_price",
         # everything else routes to END until those nodes exist
         "answer_policy_question": END,
         "handle_return_request": END,
         "handle_refund_request": END,
-        "check_price": END,
         "assign_to_human": END,
         "greet": END,
         "handle_composite": END,
@@ -54,13 +55,23 @@ graph.add_conditional_edges(
 )
 
 graph.add_edge("check_order_status", END)
+graph.add_edge("check_price", END)
 
 app = graph.compile()
 
-result = app.invoke(ConversationState(
-    id="test-1",
-    message="Where's my order ord_1002?",
-    outcomes={},
-))
+messages = [
+    "Where's my order ord_1002?",
+    "do you have jackets? what are their prices?"
+]
 
-print(result)
+i = 0
+
+for message in messages:
+    result = app.invoke(ConversationState(
+        id=f"test-{i}",
+        message=message,
+        outcomes={},
+    ))
+
+    print(result)
+    i = i + 1

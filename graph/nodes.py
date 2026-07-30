@@ -1,5 +1,9 @@
+from typing import List
+
 from models.conversation_state import ConversationState
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
+from models.product import Product
+from services.product_service import get_products_by_name
 from services.triage_service import triage_message
 from services.order_service import get_order_by_id
 from models.order import Order
@@ -41,4 +45,24 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
                 return state
         else:
             state.outcomes["order_status"] = "Could you share your order ID so I can look that up?"
+            return state
+
+
+def check_price_node(state: ConversationState) -> ConversationState:
+    triage_result = state.triage_result
+    if triage_result is None:
+        raise ValueError("performing check_price on a conversation state with triage_result None")
+    else:
+        product_ref = triage_result.product_reference
+        if product_ref is not None:
+            products = get_products_by_name(product_ref)
+            if not products:
+                state.outcomes["price_check"] = "I couldn't find the product you're asking for."
+                return state
+            else:
+                message = f"I found these products matching your query: {products}"
+                state.outcomes["price_check"] = message
+                return state
+        else:
+            state.outcomes["price_check"] = "I couldn't find the product you're asking for."
             return state
