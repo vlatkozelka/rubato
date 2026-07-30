@@ -7,8 +7,8 @@ openai==2.50.0
 instructor==1.15.4
 
 # Phase 2+ (uncomment as each phase is built)
-# langchain==0.3.1
-# langgraph==0.2.28
+ langchain==0.3.1
+ langgraph==0.2.28
  sqlalchemy==2.0.35
  psycopg[binary]==3.2.2
  pgvector==0.3.4
