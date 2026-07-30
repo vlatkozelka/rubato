@@ -1,12 +1,10 @@
-from typing import List
-
 from models.conversation_state import ConversationState
+from models.order import Order
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
-from models.product import Product
+from services.order_service import get_order_by_id
+from services.policy_qa_service import answer_policy_question
 from services.product_service import get_products_by_name
 from services.triage_service import triage_message
-from services.order_service import get_order_by_id
-from models.order import Order
 
 
 def triage_node(state: ConversationState) -> ConversationState:
@@ -66,3 +64,13 @@ def check_price_node(state: ConversationState) -> ConversationState:
         else:
             state.outcomes["price_check"] = "I couldn't find the product you're asking for."
             return state
+
+
+def answer_policy_question_node(state: ConversationState) -> ConversationState:
+    triage_result = state.triage_result
+    if triage_result is None:
+        raise ValueError("performing check_price on a conversation state with triage_result None")
+    else:
+        result = answer_policy_question(question=state.message, top_k=2)
+        state.outcomes["policy_question"] = result.answer
+        return state
