@@ -1,5 +1,6 @@
 from models.conversation_state import ConversationState
 from models.intent import Intent
+from models.intent_result import IntentResult
 from models.order import Order
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
 from services.order_service import get_order_by_id
@@ -35,15 +36,17 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
         if order_id is not None:
             order = get_order_by_id(order_id)
             if order is None:
-                state.outcomes[Intent.ORDER_STATUS] = f"I couldn't find an order with ID {order_id}."
+                state.results.append(
+                    IntentResult(intent=Intent.ORDER_STATUS, result=f"I couldn't find an order with ID {order_id}."))
                 return state
             else:
                 state.order = order
                 message = format_order_status(order)
-                state.outcomes[Intent.ORDER_STATUS] = message
+                state.results.append(IntentResult(intent=Intent.ORDER_STATUS, result=message))
                 return state
         else:
-            state.outcomes[Intent.ORDER_STATUS] = "Could you share your order ID so I can look that up?"
+            state.results.append(
+                IntentResult(intent=Intent.ORDER_STATUS, result="Could you share your order ID so I can look that up?"))
             return state
 
 
@@ -56,14 +59,16 @@ def check_price_node(state: ConversationState) -> ConversationState:
         if product_ref is not None:
             products = get_products_by_name(product_ref)
             if not products:
-                state.outcomes[Intent.PRICE_CHECK] = "I couldn't find the product you're asking for."
+                state.results.append(
+                    IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
                 return state
             else:
                 message = f"I found these products matching your query: {products}"
-                state.outcomes[Intent.PRICE_CHECK] = message
+                state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result=message))
                 return state
         else:
-            state.outcomes[Intent.PRICE_CHECK] = "I couldn't find the product you're asking for."
+            state.results.append(
+                IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
             return state
 
 
@@ -73,5 +78,5 @@ def answer_policy_question_node(state: ConversationState) -> ConversationState:
         raise ValueError("performing check_price on a conversation state with triage_result None")
     else:
         result = answer_policy_question(question=state.message, top_k=2)
-        state.outcomes[Intent.POLICY_QUESTION] = result.answer
+        state.results.append(IntentResult(intent=Intent.POLICY_QUESTION, result=result.answer))
         return state

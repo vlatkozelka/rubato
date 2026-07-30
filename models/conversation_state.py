@@ -1,9 +1,9 @@
-from typing import Optional, Dict
+from typing import Optional, List
 
 from pydantic import BaseModel, Field
 
 from models.customer import Customer
-from models.intent import Intent
+from models.intent_result import IntentResult
 from models.order import Order
 from models.triage_result import TriageResult
 
@@ -14,5 +14,5 @@ class ConversationState(BaseModel):
     customer: Optional[Customer] = None
     order: Optional[Order] = None
     triage_result: Optional[TriageResult] = None
-    outcomes: Dict[Intent, str] = Field(default_factory=dict)
+    results: List[IntentResult] = Field(default_factory=list)
     escalated_to: Optional[str] = None

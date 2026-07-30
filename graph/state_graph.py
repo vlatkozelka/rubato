@@ -73,8 +73,7 @@ i = 0
 for message in messages:
     result = app.invoke(ConversationState(
         id=f"test-{i}",
-        message=message,
-        outcomes={},
+        message=message
     ))
 
     print(result)
