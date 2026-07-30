@@ -80,3 +80,34 @@ def answer_policy_question_node(state: ConversationState) -> ConversationState:
         result = answer_policy_question(question=state.message, top_k=2)
         state.results.append(IntentResult(intent=Intent.POLICY_QUESTION, result=result.answer))
         return state
+
+
+def greet_node(state: ConversationState) -> ConversationState:
+    greeting_message = f"""
+Hi! I'm here to help with your orders and questions about our store. I can:
+
+- Check the status of an order
+- Answer questions about our policies (returns, shipping, warranty)
+- Look up prices on our products
+- Help you start a return
+
+Just let me know what you need!"""
+    state.results.append(IntentResult(intent=Intent.CHITCHAT, result=greeting_message))
+    return state
+
+
+def composite_node(state: ConversationState) -> ConversationState:
+    triage_result = state.triage_result
+    if triage_result is None:
+        raise ValueError("performing composite_node on a conversation state with triage_result None")
+    else:
+        sub_intents = triage_result.sub_intents
+        if not sub_intents:
+            raise ValueError("performing composite_node on a conversation state with no sub intents")
+        else:
+            # todo add memory to handle other intents
+            first_sub_intent = sub_intents[0]
+            state.results.append(IntentResult(intent=Intent.COMPOSITE,
+                                              result=f"I will help you resolve {first_sub_intent} first and then we'll handle the rest"))
+            state.triage_result.intent = first_sub_intent
+        return state

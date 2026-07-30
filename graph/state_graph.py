@@ -1,7 +1,8 @@
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 
-from graph.nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node
+from graph.nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node, greet_node, \
+    composite_node
 from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.node_id import NodeId
@@ -11,11 +12,12 @@ graph.add_node(NodeId.TRIAGE.value, triage_node)
 graph.add_node(NodeId.CHECK_ORDER_STATUS.value, check_order_status_node)
 graph.add_node(NodeId.CHECK_PRICE.value, check_price_node)
 graph.add_node(NodeId.ANSWER_POLICY_QUESTION.value, answer_policy_question_node)
+graph.add_node(NodeId.GREET.value, greet_node)
+graph.add_node(NodeId.HANDLE_COMPOSITE.value, composite_node)
 graph.set_entry_point(NodeId.TRIAGE.value)
 
 
 def traverse(state: ConversationState) -> str:
-    print(f"calling traverse on {state}")
     if state.triage_result is None:
         raise ValueError("traverse called with triage_result = None")
     else:
@@ -41,33 +43,34 @@ def traverse(state: ConversationState) -> str:
                 return NodeId.PROCESS_COMPLEX_CASE.value
 
 
+path_map = {
+    NodeId.CHECK_ORDER_STATUS.value: NodeId.CHECK_ORDER_STATUS.value,
+    NodeId.CHECK_PRICE.value: NodeId.CHECK_PRICE.value,
+    NodeId.ANSWER_POLICY_QUESTION.value: NodeId.ANSWER_POLICY_QUESTION.value,
+    NodeId.GREET.value: NodeId.GREET.value,
+    NodeId.HANDLE_COMPOSITE.value: NodeId.HANDLE_COMPOSITE.value,
+    # everything else routes to END until those nodes exist
+    NodeId.HANDLE_RETURN_REQUEST.value: END,
+    NodeId.HANDLE_REFUND_REQUEST.value: END,
+    NodeId.ASSIGN_TO_HUMAN.value: END,
+    NodeId.PROCESS_COMPLEX_CASE.value: END,
+}
 graph.add_conditional_edges(
     NodeId.TRIAGE.value,
     traverse,
-    {
-        NodeId.CHECK_ORDER_STATUS.value: NodeId.CHECK_ORDER_STATUS.value,
-        NodeId.CHECK_PRICE.value: NodeId.CHECK_PRICE.value,
-        NodeId.ANSWER_POLICY_QUESTION.value: NodeId.ANSWER_POLICY_QUESTION.value,
-        # everything else routes to END until those nodes exist
-        NodeId.HANDLE_RETURN_REQUEST.value: END,
-        NodeId.HANDLE_REFUND_REQUEST.value: END,
-        NodeId.ASSIGN_TO_HUMAN.value: END,
-        NodeId.GREET.value: END,
-        NodeId.HANDLE_COMPOSITE.value: END,
-        NodeId.PROCESS_COMPLEX_CASE.value: END,
-    },
+    path_map,
 )
 
 graph.add_edge(NodeId.CHECK_ORDER_STATUS.value, END)
 graph.add_edge(NodeId.CHECK_PRICE.value, END)
 graph.add_edge(NodeId.ANSWER_POLICY_QUESTION.value, END)
+graph.add_edge(NodeId.GREET.value, END)
+graph.add_conditional_edges(NodeId.HANDLE_COMPOSITE.value, traverse, path_map)
 
 app = graph.compile()
 
 messages = [
-    "Where's my order ord_1002?",
-    "do you have jackets? what are their prices?",
-    "How many days do I have to return an opened software license?"
+    "I want to know the prices of jackets, and I want to return a game I bought"
 ]
 
 i = 0

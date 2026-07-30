@@ -135,6 +135,31 @@ a nullable list field, a conflict-pair schema, extra few-shot examples)
 isn't worth carrying if it's not earning its keep. Revisit this
 decision once real accuracy/latency/cost numbers exist, not before.
 
+---
+
+## Enums for Intent and NodeId, and a LangGraph limitation
+
+Replaced raw strings for `Intent` and node names with `(str, Enum)`
+classes, to get validation-at-parse-time instead of silent typos
+(e.g. `"order_stauts"` passing through unnoticed).
+
+Known LangGraph limitation: passing Enum members directly to
+`add_node`, `set_entry_point`, and `add_conditional_edges` broke
+graph execution silently — no error, but the entry node never ran.
+This is a documented issue (langgraph #2964: "Cannot use Enums for
+node names"), not a design mistake on our end.
+
+Fix: `NodeId` and `Intent` stay as enums everywhere in our own code
+for readability and validation, but every call into LangGraph's API
+(add_node, set_entry_point, add_conditional_edges source/path_map)
+uses `.value` to pass a plain string. Worth remembering if we ever
+add a new node: the `.value` requirement applies there too.
+
+Also, `traverse()` currently has no `case _:` fallback — an intent
+that falls through without a matching case silently returns `None`.
+Python's `match` doesn't enforce exhaustiveness the way Kotlin's
+`when` does over a sealed class. Flagged, not yet fixed.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
