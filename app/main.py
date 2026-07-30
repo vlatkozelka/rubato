@@ -13,6 +13,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app.config import LLM_BASE_URL, LLM_MODEL
+from graph.state_graph import app_graph
+from models.conversation_state import ConversationState
 
 app = FastAPI(
     title="Rubato",
@@ -46,20 +48,16 @@ def health() -> dict:
 
 @app.post("/support/message", response_model=SupportMessageResponse)
 def support_message(payload: SupportMessageRequest) -> SupportMessageResponse:
-    """
-    Phase 1: hardcoded response, no triage or routing yet.
+    state = ConversationState(
+        id=payload.conversation_id,
+        message=payload.message,
+    )
 
-    Confirms the request/response contract that every later phase builds on:
-    conversation_id in, structured response out, every call gets a trace_id
-    (real tracing arrives in Phase 11 — for now it's just a marker so nothing
-    downstream has to change shape later).
-    """
+    result = app_graph.invoke(state)
+
     return SupportMessageResponse(
         conversation_id=payload.conversation_id,
-        reply=(
-            "Thanks for reaching out — this is the Rubato skeleton talking. "
-            "Real triage and routing land in Phase 2 and onward."
-        ),
+        reply=f"{result}",
         intent=None,
         trace_id=str(uuid4()),
         responded_at=datetime.now(timezone.utc).isoformat(),

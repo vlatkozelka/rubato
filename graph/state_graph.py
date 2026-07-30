@@ -67,19 +67,21 @@ graph.add_edge(NodeId.ANSWER_POLICY_QUESTION.value, END)
 graph.add_edge(NodeId.GREET.value, END)
 graph.add_conditional_edges(NodeId.HANDLE_COMPOSITE.value, traverse, path_map)
 
-app = graph.compile()
+app_graph = graph.compile()
 
-messages = [
-    "I want to know the prices of jackets, and I want to return a game I bought"
-]
 
-i = 0
+if __name__ == "__main__":
+    messages = [
+        "I want to know the prices of jackets, and I want to return a game I bought"
+    ]
 
-for message in messages:
-    result = app.invoke(ConversationState(
-        id=f"test-{i}",
-        message=message,
-    ))
+    i = 0
 
-    print(result)
-    i = i + 1
+    for message in messages:
+        result = app_graph.invoke(ConversationState(
+            id=f"test-{i}",
+            message=message,
+        ))
+
+        print(result)
+        i = i + 1
