@@ -8,13 +8,13 @@ from models.intent import Intent
 from models.node_id import NodeId
 
 graph = StateGraph(ConversationState)
-graph.add_node(NodeId.TRIAGE.value, triage_node)
-graph.add_node(NodeId.CHECK_ORDER_STATUS.value, check_order_status_node)
-graph.add_node(NodeId.CHECK_PRICE.value, check_price_node)
-graph.add_node(NodeId.ANSWER_POLICY_QUESTION.value, answer_policy_question_node)
-graph.add_node(NodeId.GREET.value, greet_node)
-graph.add_node(NodeId.HANDLE_COMPOSITE.value, composite_node)
-graph.set_entry_point(NodeId.TRIAGE.value)
+graph.add_node(NodeId.TRIAGE, triage_node)
+graph.add_node(NodeId.CHECK_ORDER_STATUS, check_order_status_node)
+graph.add_node(NodeId.CHECK_PRICE, check_price_node)
+graph.add_node(NodeId.ANSWER_POLICY_QUESTION, answer_policy_question_node)
+graph.add_node(NodeId.GREET, greet_node)
+graph.add_node(NodeId.HANDLE_COMPOSITE, composite_node)
+graph.set_entry_point(NodeId.TRIAGE)
 
 
 def traverse(state: ConversationState) -> str:
@@ -24,48 +24,48 @@ def traverse(state: ConversationState) -> str:
         match state.triage_result.intent:
 
             case Intent.ORDER_STATUS:
-                return NodeId.CHECK_ORDER_STATUS.value
+                return NodeId.CHECK_ORDER_STATUS
             case Intent.POLICY_QUESTION:
-                return NodeId.ANSWER_POLICY_QUESTION.value
+                return NodeId.ANSWER_POLICY_QUESTION
             case Intent.RETURN_REQUEST:
-                return NodeId.HANDLE_RETURN_REQUEST.value
+                return NodeId.HANDLE_RETURN_REQUEST
             case Intent.REFUND_REQUEST:
-                return NodeId.HANDLE_REFUND_REQUEST.value
+                return NodeId.HANDLE_REFUND_REQUEST
             case Intent.PRICE_CHECK:
-                return NodeId.CHECK_PRICE.value
+                return NodeId.CHECK_PRICE
             case Intent.ESCALATE:
-                return NodeId.ASSIGN_TO_HUMAN.value
+                return NodeId.ASSIGN_TO_HUMAN
             case Intent.CHITCHAT:
-                return NodeId.GREET.value
+                return NodeId.GREET
             case Intent.COMPOSITE:
-                return NodeId.HANDLE_COMPOSITE.value
+                return NodeId.HANDLE_COMPOSITE
             case Intent.COMPLEX_CASE:
-                return NodeId.PROCESS_COMPLEX_CASE.value
+                return NodeId.PROCESS_COMPLEX_CASE
 
 
 path_map = {
-    NodeId.CHECK_ORDER_STATUS.value: NodeId.CHECK_ORDER_STATUS.value,
-    NodeId.CHECK_PRICE.value: NodeId.CHECK_PRICE.value,
-    NodeId.ANSWER_POLICY_QUESTION.value: NodeId.ANSWER_POLICY_QUESTION.value,
-    NodeId.GREET.value: NodeId.GREET.value,
-    NodeId.HANDLE_COMPOSITE.value: NodeId.HANDLE_COMPOSITE.value,
+    NodeId.CHECK_ORDER_STATUS: NodeId.CHECK_ORDER_STATUS,
+    NodeId.CHECK_PRICE: NodeId.CHECK_PRICE,
+    NodeId.ANSWER_POLICY_QUESTION: NodeId.ANSWER_POLICY_QUESTION,
+    NodeId.GREET: NodeId.GREET,
+    NodeId.HANDLE_COMPOSITE: NodeId.HANDLE_COMPOSITE,
     # everything else routes to END until those nodes exist
-    NodeId.HANDLE_RETURN_REQUEST.value: END,
-    NodeId.HANDLE_REFUND_REQUEST.value: END,
-    NodeId.ASSIGN_TO_HUMAN.value: END,
-    NodeId.PROCESS_COMPLEX_CASE.value: END,
+    NodeId.HANDLE_RETURN_REQUEST: END,
+    NodeId.HANDLE_REFUND_REQUEST: END,
+    NodeId.ASSIGN_TO_HUMAN: END,
+    NodeId.PROCESS_COMPLEX_CASE: END,
 }
 graph.add_conditional_edges(
-    NodeId.TRIAGE.value,
+    NodeId.TRIAGE,
     traverse,
     path_map,
 )
 
-graph.add_edge(NodeId.CHECK_ORDER_STATUS.value, END)
-graph.add_edge(NodeId.CHECK_PRICE.value, END)
-graph.add_edge(NodeId.ANSWER_POLICY_QUESTION.value, END)
-graph.add_edge(NodeId.GREET.value, END)
-graph.add_conditional_edges(NodeId.HANDLE_COMPOSITE.value, traverse, path_map)
+graph.add_edge(NodeId.CHECK_ORDER_STATUS, END)
+graph.add_edge(NodeId.CHECK_PRICE, END)
+graph.add_edge(NodeId.ANSWER_POLICY_QUESTION, END)
+graph.add_edge(NodeId.GREET, END)
+graph.add_conditional_edges(NodeId.HANDLE_COMPOSITE, traverse, path_map)
 
 app_graph = graph.compile()
 
