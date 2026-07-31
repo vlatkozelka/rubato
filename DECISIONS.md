@@ -160,6 +160,29 @@ that falls through without a matching case silently returns `None`.
 Python's `match` doesn't enforce exhaustiveness the way Kotlin's
 `when` does over a sealed class. Flagged, not yet fixed.
 
+
+## Phase 6 - Approval Gate: Hand-Rolled Queue vs LangGraph `interrupt()`
+
+**Decision:** Refund approval is a decoupled queue (Option B), not a paused
+graph execution (Option A).
+
+**Why:** LangGraph's `interrupt()` pauses a single execution for a human to
+resume *that same run* — a good fit for something like a supervised coding
+agent where a human is actively watching. A refund approval queue is reviewed
+asynchronously, in arbitrary order, by any staff member, possibly days later.
+That's not one paused execution, it's two decoupled systems (agent decision,
+human execution) connected by a database record.
+
+**Implementation:** The `refund_request` node computes eligibility/amount,
+writes a `pending` row to the `approvals` table with the reasoning, and the
+graph run ends normally. `POST /approvals/{id}/approve` is a separate code
+path that executes the refund directly — it does not resume the graph.
+
+**Revisit when:** Phase 8 adds a persistence layer. Worth reassessing then
+whether `interrupt()` + a checkpointer is a better fit for the complex-case
+agent loop (Phase 9), which is closer to the "active supervision" case than
+refunds are.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
