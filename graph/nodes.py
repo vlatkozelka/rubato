@@ -1,3 +1,6 @@
+import logging
+
+from app.timing import log_duration
 from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.intent_result import IntentResult
@@ -7,6 +10,8 @@ from services.order_service import get_order_by_id
 from services.policy_qa_service import answer_policy_question
 from services.product_service import get_products_by_name
 from services.triage_service import triage_message
+
+logger = logging.getLogger("rubato.nodes")
 
 
 def triage_node(state: ConversationState) -> ConversationState:
@@ -34,8 +39,10 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
     else:
         order_id = triage_result.order_id
         if order_id is not None:
-            order = get_order_by_id(order_id)
+            with log_duration(logger, "order_lookup_finished", order_id=order_id):
+                order = get_order_by_id(order_id)
             if order is None:
+                logger.warning("order_not_found", extra={"event": "order_not_found", "order_id": order_id})
                 state.results.append(
                     IntentResult(intent=Intent.ORDER_STATUS, result=f"I couldn't find an order with ID {order_id}."))
                 return state
@@ -45,6 +52,7 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
                 state.results.append(IntentResult(intent=Intent.ORDER_STATUS, result=message))
                 return state
         else:
+            logger.info("order_id_missing", extra={"event": "order_id_missing"})
             state.results.append(
                 IntentResult(intent=Intent.ORDER_STATUS, result="Could you share your order ID so I can look that up?"))
             return state
@@ -57,8 +65,10 @@ def check_price_node(state: ConversationState) -> ConversationState:
     else:
         product_ref = triage_result.product_reference
         if product_ref is not None:
-            products = get_products_by_name(product_ref)
+            with log_duration(logger, "product_lookup_finished", query=product_ref):
+                products = get_products_by_name(product_ref)
             if not products:
+                logger.warning("product_not_found", extra={"event": "product_not_found", "query": product_ref})
                 state.results.append(
                     IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
                 return state
@@ -67,6 +77,7 @@ def check_price_node(state: ConversationState) -> ConversationState:
                 state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result=message))
                 return state
         else:
+            logger.info("product_reference_missing", extra={"event": "product_reference_missing"})
             state.results.append(
                 IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
             return state

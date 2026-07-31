@@ -1,46 +1,69 @@
+import logging
+
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 
+from graph.instrumentation import instrumented_node
 from graph.nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node, greet_node, \
     composite_node
 from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.node_id import NodeId
 
+logger = logging.getLogger("rubato.graph.router")
+
 graph = StateGraph(ConversationState)
-graph.add_node(NodeId.TRIAGE, triage_node)
-graph.add_node(NodeId.CHECK_ORDER_STATUS, check_order_status_node)
-graph.add_node(NodeId.CHECK_PRICE, check_price_node)
-graph.add_node(NodeId.ANSWER_POLICY_QUESTION, answer_policy_question_node)
-graph.add_node(NodeId.GREET, greet_node)
-graph.add_node(NodeId.HANDLE_COMPOSITE, composite_node)
+graph.add_node(NodeId.TRIAGE, instrumented_node(NodeId.TRIAGE.value, triage_node))
+graph.add_node(NodeId.CHECK_ORDER_STATUS, instrumented_node(NodeId.CHECK_ORDER_STATUS.value, check_order_status_node))
+graph.add_node(NodeId.CHECK_PRICE, instrumented_node(NodeId.CHECK_PRICE.value, check_price_node))
+graph.add_node(NodeId.ANSWER_POLICY_QUESTION,
+               instrumented_node(NodeId.ANSWER_POLICY_QUESTION.value, answer_policy_question_node))
+graph.add_node(NodeId.GREET, instrumented_node(NodeId.GREET.value, greet_node))
+graph.add_node(NodeId.HANDLE_COMPOSITE, instrumented_node(NodeId.HANDLE_COMPOSITE.value, composite_node))
 graph.set_entry_point(NodeId.TRIAGE)
 
 
 def traverse(state: ConversationState) -> str:
     if state.triage_result is None:
+        logger.error(
+            "router_failed",
+            extra={"event": "router_failed", "reason": "triage_result is None"},
+        )
         raise ValueError("traverse called with triage_result = None")
     else:
-        match state.triage_result.intent:
+        intent = state.triage_result.intent
 
+        match intent:
             case Intent.ORDER_STATUS:
-                return NodeId.CHECK_ORDER_STATUS
+                target_node = NodeId.CHECK_ORDER_STATUS
             case Intent.POLICY_QUESTION:
-                return NodeId.ANSWER_POLICY_QUESTION
+                target_node = NodeId.ANSWER_POLICY_QUESTION
             case Intent.RETURN_REQUEST:
-                return NodeId.HANDLE_RETURN_REQUEST
+                target_node = NodeId.HANDLE_RETURN_REQUEST
             case Intent.REFUND_REQUEST:
-                return NodeId.HANDLE_REFUND_REQUEST
+                target_node = NodeId.HANDLE_REFUND_REQUEST
             case Intent.PRICE_CHECK:
-                return NodeId.CHECK_PRICE
+                target_node = NodeId.CHECK_PRICE
             case Intent.ESCALATE:
-                return NodeId.ASSIGN_TO_HUMAN
+                target_node = NodeId.ASSIGN_TO_HUMAN
             case Intent.CHITCHAT:
-                return NodeId.GREET
+                target_node = NodeId.GREET
             case Intent.COMPOSITE:
-                return NodeId.HANDLE_COMPOSITE
+                target_node = NodeId.HANDLE_COMPOSITE
             case Intent.COMPLEX_CASE:
-                return NodeId.PROCESS_COMPLEX_CASE
+                target_node = NodeId.PROCESS_COMPLEX_CASE
+            case _:
+                target_node = None
+
+        logger.info(
+            "router_decision",
+            extra={
+                "event": "router_decision",
+                "intent": intent.value,
+                "target_node": target_node.value if target_node else None,
+            },
+        )
+        return target_node
 
 
 path_map = {
@@ -71,8 +94,13 @@ app_graph = graph.compile()
 
 
 if __name__ == "__main__":
+    from app.logging_setup import configure_logging
+
+    configure_logging()
+
     messages = [
-        "I want to know the prices of jackets, and I want to return a game I bought"
+        "Can I return software products?",
+        "What are the prices of jackets?"
     ]
 
     i = 0
@@ -82,6 +110,4 @@ if __name__ == "__main__":
             id=f"test-{i}",
             message=message,
         ))
-
-        print(result)
         i = i + 1

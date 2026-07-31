@@ -31,3 +31,6 @@ POSTGRES_DSN = os.getenv(
 
 # Reserved for Phase 11.
 LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
+
+# Stdlib logging level for the "rubato" logger tree.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
