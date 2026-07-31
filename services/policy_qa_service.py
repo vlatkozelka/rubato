@@ -1,9 +1,14 @@
+import logging
+
 import instructor
 from openai import OpenAI
 
 from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+from app.timing import log_duration
 from models.policy_answer import PolicyAnswer
 from services.retrieval_service import retrieve_chunks
+
+logger = logging.getLogger("rubato.services.policy_qa")
 
 client = instructor.from_openai(
     OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
@@ -55,13 +60,14 @@ def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
         for c in chunks
     )
 
-    return client.chat.completions.create(
-        model=LLM_MODEL,
-        response_model=PolicyAnswer,
-        max_retries=3,
-        temperature=0,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
-        ],
-    )
+    with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="answer_policy_question"):
+        return client.chat.completions.create(
+            model=LLM_MODEL,
+            response_model=PolicyAnswer,
+            max_retries=3,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
+            ],
+        )
