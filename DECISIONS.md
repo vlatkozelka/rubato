@@ -344,6 +344,161 @@ carries a separate `customer_id` claim: a customer's own `id` (e.g.
 `customer_id` when `role == customer` — `decode_access_token` sets
 `customer_id = sub` for that role and `None` for staff.
 
+## Customer login + chatbot UI, and API response formatting (2026-08-01)
+
+Done as an out-of-band task between phases, same pattern as the Postgres/JWT
+infra detour above — not a numbered phase, but real functionality landing on
+top of the auth work that detour left in place.
+
+**UI stack: static HTML + vanilla JS, served by FastAPI, no build step.**
+Two pages (`static/login.html`, `static/chat.html`), one shared stylesheet,
+one JS file per page, served via `StaticFiles` mounted at `/assets` plus two
+explicit `FileResponse` routes (`GET /login`, `GET /chat`) in `app/main.py`.
+No Jinja2, no bundler, no frontend framework.
+
+**Why no build step:** the entire UI is two forms and a message list — no
+client-side routing, no shared component state beyond "list of chat
+messages," nothing a framework's diffing/state-management would meaningfully
+simplify. A build step (npm, bundler config, JSX transform) is a second
+toolchain next to the Python one, for a two-page portfolio demo whose entire
+value is "an interviewer can read the whole thing in five minutes." Same
+"boring over clever" bias as the rest of this project. Revisit only if this
+UI ever grows real client-side state (e.g. multi-conversation history,
+optimistic updates) that a plain `fetch` + DOM-append loop can't express
+cleanly.
+
+**Why not server-rendered (Jinja2) either:** neither page needs server-side
+data at render time — the login form is static, and the chat page's only
+"data" (the token, the message list) lives entirely client-side after
+login. Jinja2 would add a templating dependency to solve a problem
+(injecting server data into HTML) that doesn't exist here. If a future page
+needs server-rendered data (e.g. a staff approval queue listing pending
+approvals), Jinja2 becomes the right call there — noted for that not-yet-
+built page, not retrofitted onto these two.
+
+**Token storage: `sessionStorage`, not `localStorage` or an httpOnly
+cookie.** Chose the middle option deliberately:
+- Plain in-memory JS variable is the most XSS-resistant (no persisted copy
+  for a malicious script to read after the fact) but is lost on any page
+  refresh — for a chat UI where a refresh is a normal thing to do
+  mid-conversation, that's a real usability cost for a marginal security
+  gain in a two-page demo with no third-party JS on the page (no npm
+  supply chain = the realistic XSS surface here is near zero).
+- `localStorage` persists indefinitely across browser restarts, which is
+  more exposure window than this needs — a stolen token from an old,
+  forgotten tab is a worse outcome than one that dies when the tab closes.
+- `sessionStorage` clears when the tab closes but survives a same-tab
+  refresh, which matches how this demo is actually used (one login, one
+  chat session, closed when done) without the indefinite-persistence
+  downside of `localStorage`.
+- An httpOnly cookie is the strongest option against XSS (JS can't read it
+  at all) but this API is a stateless Bearer-token API (`Authorization`
+  header, no server-side session), not cookie-based — switching to cookies
+  means also building CSRF protection (SameSite alone isn't sufficient
+  once a form/fetch can be triggered cross-site), which is real backend
+  surface to add just to store the token more safely. Disproportionate for
+  a two-page demo; this is the concrete next step if this ever became a
+  real product with a real session lifetime (see the "no refresh token"
+  decision above — same "not yet, but here's the upgrade path" shape).
+
+**No client-side conversation history persistence.** `conversation_id` is a
+fresh `crypto.randomUUID()` generated on page load, held only in a JS
+variable — matches the task's "message history for the session" framing.
+Reloading the chat page starts a new conversation; nothing is lost that
+matters for a demo, and building persistence (localStorage transcript,
+or a server-side conversation store) is real scope `ConversationState`
+doesn't support today anyway (each `/support/message` call constructs a
+fresh `ConversationState`, not one loaded from a prior turn — multi-turn
+memory isn't wired up yet, so the UI shouldn't imply it is).
+
+**No markdown rendering.** `greet_node`'s reply contains a markdown-style
+bullet list (`- Check the status...`). Rendered as plain preformatted text
+(`white-space: pre-wrap` in CSS) rather than parsed as markdown — pulling in
+a markdown-to-HTML library for one node's bullet list isn't worth a new
+dependency. Line breaks and indentation still show correctly; only the
+`-` stays literal instead of becoming a `<li>`. Revisit if reply content
+starts using markdown more heavily (e.g. bold/links in RAG answers).
+
+**No staff UI, by design.** Explicitly out of scope for this task — no
+`/auth/staff` page, no approval-queue page. The staff login endpoint and
+`/approvals/*` endpoints are untouched and still API-only.
+
+### API response formatting
+
+**The bug:** `POST /support/message` had a `response_model=SupportMessageResponse`
+declared, but the handler built `reply=f"{result}"` where `result` was the
+raw dict LangGraph's `.invoke()` returns (a serialized `ConversationState`)
+— so the "clean" response model was wrapping a Python repr dump of the
+entire conversation state (including nested `Order`, `TriageResult`, enum
+reprs like `<Intent.ORDER_STATUS: 'order_status'>`) inside one string field.
+Declaring a `response_model` doesn't help if a handler stuffs an object
+dump into a field FastAPI can't see is wrong, because the field is typed
+`str` and any string validates. `check_price_node` had the same class of
+bug one level down — `f"...{products}"` interpolated a `List[Product]`
+directly into the result string, and `composite_node` interpolated a raw
+`Intent` enum member the same way (`f"...{first_sub_intent}..."`, which
+prints as `Intent.ORDER_STATUS`, not `order_status`) — see the "Enums for
+Intent and NodeId" decision above for why `(str, Enum)` doesn't
+`str()`/`f-string`-format the way it might look like it should.
+
+**Fix:** `app_graph.invoke(state)` result is now revalidated back into a
+`ConversationState` (`ConversationState.model_validate(raw_result)`)
+instead of interpolated directly, and `app/main.py` builds the response
+from its typed `results: List[IntentResult]`, not from the raw graph
+output. `check_price_node` gained a `format_price_matches()` helper
+(same pattern as the pre-existing `format_order_status()` right next to
+it) instead of interpolating `Product` objects into a string.
+`composite_node` now uses `.value` on the sub-intent, same fix
+`traverse()` already needed for the same reason. All three are string-
+formatting fixes at the point results get turned into user-facing text —
+not changes to triage/routing/RAG logic itself.
+
+**Response shape decision — what "clean" means for a chat reply.** The
+task brief referenced an `outcomes: Dict[str, str]` shape on
+`ConversationState` as the thing to design around; the actual field is
+`results: List[IntentResult]` (`intent: Intent`, `result: Optional[str]`,
+now also `citations: Optional[List[str]]`) — noting the mismatch here
+since the brief may have been written against an earlier/hypothetical
+version of this model. Designed the response mapping against what's
+actually in the codebase:
+- `SupportMessageResponse.reply: str` — every non-empty `IntentResult.result`
+  in `results`, joined with blank lines. For the common case (one intent,
+  one result) this is unchanged from before. For `composite` messages,
+  `results` holds more than one entry (`composite_node`'s own "I'll handle
+  X first" plus the resolved sub-intent's result), and joining both is more
+  informative than showing only one — previously this case wasn't visibly
+  distinct anyway since the whole response was broken.
+- `SupportMessageResponse.intent: Optional[Intent]` — the *last* result's
+  intent, i.e. the actually-resolved outcome (for `composite`, that's the
+  resolved sub-intent, not the literal `composite` tag) — chosen because
+  this is what a UI would want to branch on to decide how to render the
+  reply (e.g. "show a citations block").
+- `SupportMessageResponse.citations: Optional[List[str]]` — sourced from
+  `IntentResult.citations`, a new field populated only by
+  `answer_policy_question_node` from `PolicyAnswer.cited_sources` (which
+  existed already but was being silently dropped — only `.answer` made it
+  into `IntentResult` before). Kept as a flat list of source strings
+  (`"return-policy.md#Opened software"`) rather than inventing a richer
+  citation object, since that's the exact shape `PolicyAnswer` already
+  produces and there's no UI need yet for more structure than "list these
+  under the reply."
+- Deliberately **not** exposed: `PolicyAnswer.grounded`, or any
+  intent-specific structured payload (e.g. a separate `order` object
+  mirroring `models/order.py` for an order-status "status card"). Order
+  status and price-check replies are already fully rendered into `reply`
+  as clean text by their respective `format_*` helpers — a parallel
+  structured field would duplicate that text as data with no current
+  consumer. If a future UI wants a richer order-status card (e.g.
+  clickable line items), that's the point to add an intent-specific
+  optional field, not before.
+
+**Existing endpoints (`/auth/*/login`, `/approvals*`) were already
+correct** — each already declares an explicit `response_model` and maps a
+Postgres row to a real Pydantic model (`Approval`, `LoginResponse`) before
+returning, no service/domain object leaking through. `/support/message`
+was the only endpoint actually returning an unserialized object dump; no
+changes were needed elsewhere for "ideally all endpoints."
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency

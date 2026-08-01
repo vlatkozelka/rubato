@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rubato — Customer Login</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="card">
+    <h1>Sign in to Rubato support</h1>
+    <form id="login-form">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" autocomplete="username" required>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+      <button type="submit" id="submit-btn">Log in</button>
+    </form>
+    <div class="error" id="error-box"></div>
+    <p class="hint">Demo account: any seeded customer email, password <code>customer-demo-pass</code>.</p>
+  </div>
+  <script src="/assets/login.js"></script>
+</body>
+</html>
