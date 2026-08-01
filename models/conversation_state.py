@@ -11,6 +11,7 @@ from models.triage_result import TriageResult
 class ConversationState(BaseModel):
     id: str
     message: str
+    customer_id: Optional[str] = None
     customer: Optional[Customer] = None
     order: Optional[Order] = None
     triage_result: Optional[TriageResult] = None

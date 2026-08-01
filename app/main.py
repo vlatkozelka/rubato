@@ -9,26 +9,25 @@ goes on top of it.
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.auth import require_customer, require_staff
+from app.auth import require_customer
 from app.config import BASE_DIR, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, LLM_BASE_URL, LLM_MODEL
 from app.conversation_log_filter import conversation_context
 from app.logging_setup import configure_logging
 from app.security import create_access_token
 from app.timing import log_duration
 from graph.state_graph import app_graph
-from models.approval import Approval
 from models.auth_principal import AuthPrincipal
 from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.user_role import UserRole
-from services.approval_service import list_pending_approvals, set_approval_status
+from routers.approvals import router as approvals_router
 from services.customer_auth_service import authenticate_customer
 from services.staff_auth_service import authenticate_staff
 
@@ -45,6 +44,7 @@ app = FastAPI(
     version="0.1.0",
 )
 app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+app.include_router(approvals_router)
 
 
 def _preview(text: str, limit: int = _MESSAGE_PREVIEW_CHARS) -> str:
@@ -121,27 +121,6 @@ def staff_login(payload: LoginRequest) -> LoginResponse:
     return _issue_token(staff.id, UserRole.STAFF)
 
 
-@app.get("/approvals", response_model=list[Approval])
-def get_approvals(_: AuthPrincipal = Depends(require_staff)) -> list[Approval]:
-    return list_pending_approvals()
-
-
-@app.post("/approvals/{approval_id}/approve", response_model=Approval)
-def approve_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) -> Approval:
-    approval = set_approval_status(approval_id, "approved")
-    if approval is None:
-        raise HTTPException(status_code=404, detail="Approval not found")
-    return approval
-
-
-@app.post("/approvals/{approval_id}/deny", response_model=Approval)
-def deny_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) -> Approval:
-    approval = set_approval_status(approval_id, "denied")
-    if approval is None:
-        raise HTTPException(status_code=404, detail="Approval not found")
-    return approval
-
-
 def _build_support_response(conversation_id: str, result_state: ConversationState) -> SupportMessageResponse:
     # Maps internal ConversationState.results onto the API's chat shape — see DECISIONS.md.
     non_empty = [r for r in result_state.results if r.result]
@@ -185,6 +164,7 @@ def support_message(
             state = ConversationState(
                 id=payload.conversation_id,
                 message=payload.message,
+                customer_id=customer_id,
             )
 
             raw_result = app_graph.invoke(state)
