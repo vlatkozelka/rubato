@@ -1,0 +1,22 @@
+-- Generated from data/products.json (pre-migration source of truth).
+INSERT INTO products (id, name, price, category, size, stock) VALUES
+    ('prod_001', 'Trailhead Rain Jacket', 89.0, 'outerwear', 'M', 4),
+    ('prod_002', 'Trailhead Rain Jacket', 89.0, 'outerwear', 'L', 0),
+    ('prod_003', 'Trailhead Rain Jacket', 89.0, 'outerwear', 'S', 7),
+    ('prod_004', 'Aria Wireless Earbuds', 59.0, 'electronics', NULL, 12),
+    ('prod_005', 'Pulse Fitness Tracker', 45.0, 'electronics', NULL, 3),
+    ('prod_006', 'Cascade Insulated Bottle', 24.0, 'accessories', '750ml', 30),
+    ('prod_007', 'Northline Merino Sweater', 72.0, 'apparel', 'M', 6),
+    ('prod_008', 'Northline Merino Sweater', 72.0, 'apparel', 'L', 2),
+    ('prod_009', 'Basecamp Hiking Boots', 128.0, 'footwear', '9', 5),
+    ('prod_010', 'Basecamp Hiking Boots', 128.0, 'footwear', '10', 0),
+    ('prod_011', 'Drift Yoga Mat', 32.0, 'fitness', NULL, 18),
+    ('prod_012', 'Summit Backpack 30L', 95.0, 'bags', NULL, 9),
+    ('prod_013', 'Glow Desk Lamp', 38.0, 'home', NULL, 14),
+    ('prod_014', 'Orbit Bluetooth Speaker', 49.0, 'electronics', NULL, 8),
+    ('prod_015', 'Meadow Cotton Tee', 22.0, 'apparel', 'M', 40),
+    ('prod_016', 'Meadow Cotton Tee', 22.0, 'apparel', 'S', 25),
+    ('prod_017', 'Vertex Trail Running Shoes', 110.0, 'footwear', '9', 6),
+    ('prod_018', 'Nimbus Packable Umbrella', 18.0, 'accessories', NULL, 22),
+    ('prod_019', 'Ridge Software License Card', 40.0, 'software', NULL, 50),
+    ('prod_020', 'Halo Reading Light', 15.0, 'electronics', NULL, 0);

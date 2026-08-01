@@ -183,6 +183,129 @@ whether `interrupt()` + a checkpointer is a better fit for the complex-case
 agent loop (Phase 9), which is closer to the "active supervision" case than
 refunds are.
 
+## Infra detour — Postgres migration + JWT auth (2026-08-01)
+
+Done as an out-of-band detour between Phase 5 sessions, not as a numbered
+phase. Sandbox JSON files (`data/*.json`) are gone; `products`, `customers`,
+`orders`/`order_items`, `return_history`, and `users` now live in Postgres,
+seeded entirely from SQL in `db/init/`. See `PLAN.md` for the note on where
+this sits relative to phase numbering.
+
+**Order status schema:** kept the flat `status_kind` column + a single
+nullable `delivered_at` column on `orders`, rather than a separate
+status/events table. This mirrors the shape orders.json already had, and
+`Order`'s `model_validator(mode="before")` (models/order.py) already knows how
+to reassemble the four-way discriminated union from exactly that shape, so
+`order_service.py` builds the same flat dict and hands it to `Order(**raw)`
+unchanged. Only `delivered` currently carries extra data (`delivered_at`); if
+a future status needs its own fields, a JSONB column or a real status-history
+table is the better move — one nullable column per status doesn't scale past
+one or two.
+
+**Order items:** snapshot `name` and `price` on `order_items` instead of only
+storing `product_id` and joining to `products` for display. This matches what
+`orders.json` already did (repeating name/price per line item) — intentional,
+since a historical order should keep showing what the customer actually paid,
+even if the product is later renamed or repriced.
+
+**Users table:** one `users` table with a `role` CHECK ('staff'/'customer')
+and a nullable `customer_id` FK, instead of a separate `staff_users` table.
+Staff and customer accounts authenticate identically (email + password_hash,
+one `/auth/login` endpoint, one JWT shape); the only structural difference is
+whether a customer link exists, which one nullable column and a
+`CHECK ((role = 'customer') = (customer_id IS NOT NULL))` constraint express
+without a second parallel schema. Same reasoning as the `status_kind` +
+nullable-column choice above — a discriminator column over a second table
+when the two cases share almost everything.
+
+**JWT, no refresh token:** access tokens only, 60-minute expiry
+(`JWT_ACCESS_TOKEN_EXPIRE_MINUTES`), no refresh token or rotation. This is a
+portfolio sandbox exercised by short manual/API sessions, not a product with
+real user sessions to keep alive — a refresh flow adds real surface
+(rotation, revocation, storage) for no exercised benefit yet. Revisit if this
+project ever grows a UI where a human sits in a session longer than an hour.
+
+**customer_id: token, not body.** `POST /support/message` used to take
+`customer_id` in the request body; it's now dropped from
+`SupportMessageRequest` entirely and derived from the JWT (`principal.customer_id`
+via `require_customer`). Chose "derive from token" over "check token matches
+body" because it removes an entire class of bug (trusting a client-supplied
+identity field) rather than just detecting it — the token is already the
+source of truth for who's asking, so asking the client to also state it and
+then verifying agreement is redundant. This is a breaking change to the
+request shape, acceptable since there are no external consumers of this API
+yet.
+
+**Full-text product search (supersedes the word-overlap note in the old
+`product_service.py`):** `get_products_by_name` no longer does naive
+word-overlap matching over an in-memory list — see the "Naive word-overlap
+matching..." comment that used to sit in that file, which explicitly named
+Postgres full-text search as the fix once the data left JSON. That's what
+this is. `products.search_vector` is a `GENERATED ALWAYS AS ... STORED`
+`tsvector` (name weighted 'A', category weighted 'B'), indexed with GIN, and
+queried with `websearch_to_tsquery` + `ts_rank_cd` — `websearch_to_tsquery`
+because it's the one built to parse how people actually type free-text
+queries (quotes, `-exclude`, implicit AND), which is closer to a customer
+support message than `plainto_tsquery`. Chose a generated column over a
+trigger because `to_tsvector('english', text)` is immutable when the config
+name is a literal, so Postgres can maintain it automatically with no
+trigger function to keep in sync — the tradeoff is the generated expression
+lives in the `CREATE TABLE` statement rather than being swappable at
+runtime, which is fine here since there's one search config, not several.
+
+Also added a `pg_trgm` trigram index on `name` as a fallback path,
+specifically for typos (e.g. "sweter" → "Sweater") — a realistic scenario
+in support chat that full-text search alone doesn't catch, since
+`to_tsvector` matches word stems, not near-misses. Used `word_similarity()`
+with a manual `> 0.3` threshold rather than the `<%` operator (whose default
+threshold is 0.6, tuned for longer text) — a short query like "sweter"
+against a multi-word product name scored 0.5 in testing, correctly above a
+0.3 bar but below 0.6. At catalog sizes beyond a 20-item sandbox, switch to
+`<%` with `SET pg_trgm.word_similarity_threshold` so the trigram GIN index
+gets used instead of a sequential scan; not worth the added config at this
+scale. This full-text/trigram work is unrelated to the hybrid-search work
+PLAN.md already scopes for Phase 4b (`policy_chunks`, RAG) — same Postgres
+features, different table, different purpose (product lookup vs. grounded
+policy answers).
+
+**Approval endpoints didn't exist yet — added minimal versions to have
+something to gate.** `GET /approvals`, `POST /approvals/{id}/approve`, and
+`POST /approvals/{id}/deny` were fully specified in PLAN.md (Phase 6) and the
+`approvals` table + `Approval` model already existed, but no route or service
+implemented them before this detour. Added `services/approval_service.py`
+(list pending, flip status) and the three routes, gated to `require_staff`.
+Deliberately did **not** implement refund execution (charging back an order,
+updating stock, etc.) — that's real Phase 6 business logic and out of scope
+here. `POST /approvals/{id}/approve` currently only flips `status` to
+`approved`; wiring an actual money-moving action into that path is Phase 6
+work.
+
+**Not pooling DB connections.** `order_service.py`, `customer_service.py`,
+`product_service.py`, `user_service.py`, and `approval_service.py` all open a
+new `psycopg.connect()` per call, same as the pre-existing
+`retrieval_service.py`/`index_docs.py` pattern. Consistent with what was
+already there, not a new decision, but flagging it as a known follow-up:
+worth moving to a shared connection pool (`psycopg_pool`) once request volume
+in evals/load-testing makes per-call connection overhead visible.
+
+**Password hashing:** `bcrypt` directly, not `passlib`. `passlib`'s bcrypt
+backend has had compatibility breakage against bcrypt >=4.x releases
+(version-introspection code that assumes an older internal API), and the
+direct `bcrypt.hashpw`/`bcrypt.checkpw` calls in `app/security.py` are a
+three-line wrapper — not enough surface for an abstraction layer to earn its
+keep. Seed passwords are generated via pgcrypto's `crypt(password,
+gen_salt('bf', 10))` directly in `db/init/012_seed_users.sql`, which produces
+standard `$2a$` bcrypt hashes that `bcrypt.checkpw` reads without any
+Python-side seeding step — verified compatible in testing.
+
+**No self-serve registration.** Seed data only (`db/init/012_seed_users.sql`):
+one staff account (`staff@rubato.test`) and one customer account per seeded
+customer, sharing a fixed demo password documented in `README.md`. This is a
+portfolio sandbox with a fixed cast of customers; a registration endpoint
+would be unused surface with no real signup flow behind it (no email
+verification, no self-serve UI) — explicitly out of scope per the task this
+detour was scoped from.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency

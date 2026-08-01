@@ -1,33 +1,75 @@
-import json
-from typing import Optional, List
+import logging
+from typing import List, Optional
 
-from app.config import DATA_DIR
+import psycopg
+
+from app.config import POSTGRES_DSN
 from models.product import Product
 
+logger = logging.getLogger("rubato.services.product")
 
-def _load_products() -> list[dict]:
-    path = DATA_DIR / "products.json"
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+_COLUMNS = "id, name, price, category, size, stock"
+
+
+def _row_to_product(row) -> Product:
+    id_, name, price, category, size, stock = row
+    return Product(id=id_, name=name, price=float(price), category=category, size=size, stock=stock)
 
 
 def get_product_by_id(product_id: str) -> Optional[Product]:
-    for raw in _load_products():
-        if raw["id"] == product_id:
-            return Product(**raw)
-    return None
+    conn = psycopg.connect(POSTGRES_DSN)
+    cur = conn.cursor()
+    cur.execute(f"SELECT {_COLUMNS} FROM products WHERE id = %s", (product_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return _row_to_product(row) if row else None
 
 
-def get_products_by_name(name: str) -> List[Product]:
-    # Naive word-overlap matching over flat JSON — no real search index here.
-    # A production system would use Elasticsearch/Algolia, or Postgres full-text
-    # search / trigram matching if staying in SQL. Acceptable for a 20-item
-    # sandbox catalog; would not scale to a real product count.
-    query_words = {w.rstrip("s") for w in name.lower().split()}
+def get_products_by_name(name: str, limit: int = 20) -> List[Product]:
+    """
+    Full-text search over name (weight A) + category (weight B), ranked with
+    ts_rank_cd. Falls back to pg_trgm word_similarity for typo tolerance
+    (e.g. "sweter" -> "Sweater") when full-text search finds nothing — see
+    DECISIONS.md for why this supersedes the old word-overlap matcher.
+    """
+    conn = psycopg.connect(POSTGRES_DSN)
+    cur = conn.cursor()
 
-    products: List[Product] = []
-    for raw in _load_products():
-        product_words = {w.rstrip("s") for w in raw["name"].lower().split()}
-        if query_words & product_words:  # any overlap at all
-            products.append(Product(**raw))
-    return products
+    cur.execute(
+        f"""
+        SELECT {_COLUMNS}
+        FROM products
+        WHERE search_vector @@ websearch_to_tsquery('english', %s)
+        ORDER BY ts_rank_cd(search_vector, websearch_to_tsquery('english', %s)) DESC
+        LIMIT %s
+        """,
+        (name, name, limit),
+    )
+    rows = cur.fetchall()
+
+    if not rows:
+        # word_similarity (not similarity/`%`) because the query is usually a
+        # short product reference ("sweter") matched against a longer,
+        # multi-word product name ("Northline Merino Sweater") — plain
+        # whole-string similarity scores those too low to be useful.
+        # Filtering in Python-land SQL rather than via the `<%` operator
+        # (default threshold 0.6) keeps the threshold explicit; at catalog
+        # sizes beyond a sandbox, switch to `<%` with
+        # `SET pg_trgm.word_similarity_threshold` so the trigram GIN index
+        # is used instead of a sequential scan.
+        cur.execute(
+            f"""
+            SELECT {_COLUMNS}
+            FROM products
+            WHERE word_similarity(%s, name) > 0.3
+            ORDER BY word_similarity(%s, name) DESC
+            LIMIT %s
+            """,
+            (name, name, limit),
+        )
+        rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+    return [_row_to_product(r) for r in rows]

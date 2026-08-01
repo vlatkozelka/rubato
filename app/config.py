@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
 DOCS_DIR = BASE_DIR / "docs"
 
 # LM Studio exposes an OpenAI-compatible /v1 endpoint. Default assumes LM
@@ -24,7 +23,8 @@ LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5-14b-instruct")
 # OpenAI-compatible interface.
 LLM_MODEL_COMPLEX = os.getenv("LLM_MODEL_COMPLEX", LLM_MODEL)
 
-# Reserved for Phase 4+.
+# pgvector (Phase 4+) plus products/customers/orders/return_history/users
+# tables (the Postgres migration detour — see DECISIONS.md).
 POSTGRES_DSN = os.getenv(
     "POSTGRES_DSN", "postgresql://rubato:rubato@localhost:5432/rubato"
 )
@@ -34,3 +34,10 @@ LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
 
 # Stdlib logging level for the "rubato" logger tree.
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# JWT auth. The default secret is dev-only (matches the LLM_API_KEY dummy
+# pattern above) — override via env outside local dev. See DECISIONS.md for
+# why there's no refresh token yet.
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-insecure-secret-change-me")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
