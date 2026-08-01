@@ -1,4 +1,5 @@
 import logging
+from typing import List
 
 from app.timing import log_duration
 from models.conversation_state import ConversationState
@@ -6,6 +7,7 @@ from models.intent import Intent
 from models.intent_result import IntentResult
 from models.order import Order
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
+from models.product import Product
 from services.order_service import get_order_by_id
 from services.policy_qa_service import answer_policy_question
 from services.product_service import get_products_by_name
@@ -58,6 +60,14 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
             return state
 
 
+def format_price_matches(products: List[Product]) -> str:
+    lines = [
+        f"- {p.name} ({p.size}): ${p.price:.2f}" + ("" if p.stock > 0 else " — out of stock")
+        for p in products
+    ]
+    return "Here's what I found:\n" + "\n".join(lines)
+
+
 def check_price_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
@@ -73,7 +83,7 @@ def check_price_node(state: ConversationState) -> ConversationState:
                     IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
                 return state
             else:
-                message = f"I found these products matching your query: {products}"
+                message = format_price_matches(products)
                 state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result=message))
                 return state
         else:
@@ -89,7 +99,11 @@ def answer_policy_question_node(state: ConversationState) -> ConversationState:
         raise ValueError("performing check_price on a conversation state with triage_result None")
     else:
         result = answer_policy_question(question=state.message, top_k=2)
-        state.results.append(IntentResult(intent=Intent.POLICY_QUESTION, result=result.answer))
+        state.results.append(IntentResult(
+            intent=Intent.POLICY_QUESTION,
+            result=result.answer,
+            citations=result.cited_sources or None,
+        ))
         return state
 
 
@@ -119,6 +133,6 @@ def composite_node(state: ConversationState) -> ConversationState:
             # todo add memory to handle other intents
             first_sub_intent = sub_intents[0]
             state.results.append(IntentResult(intent=Intent.COMPOSITE,
-                                              result=f"I will help you resolve {first_sub_intent} first and then we'll handle the rest"))
+                                              result=f"I will help you resolve {first_sub_intent.value.replace('_', ' ')} first and then we'll handle the rest"))
             state.triage_result.intent = first_sub_intent
         return state

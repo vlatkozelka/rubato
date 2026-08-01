@@ -8,13 +8,16 @@ goes on top of it.
 """
 import logging
 from datetime import datetime, timezone
+from typing import List, Optional
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.auth import require_customer, require_staff
-from app.config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES, LLM_BASE_URL, LLM_MODEL
+from app.config import BASE_DIR, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, LLM_BASE_URL, LLM_MODEL
 from app.conversation_log_filter import conversation_context
 from app.logging_setup import configure_logging
 from app.security import create_access_token
@@ -23,10 +26,13 @@ from graph.state_graph import app_graph
 from models.approval import Approval
 from models.auth_principal import AuthPrincipal
 from models.conversation_state import ConversationState
+from models.intent import Intent
 from models.user_role import UserRole
 from services.approval_service import list_pending_approvals, set_approval_status
 from services.customer_auth_service import authenticate_customer
 from services.staff_auth_service import authenticate_staff
+
+STATIC_DIR = BASE_DIR / "static"
 
 configure_logging()
 logger = logging.getLogger("rubato.api")
@@ -38,6 +44,7 @@ app = FastAPI(
     description="AI customer support copilot — portfolio project skeleton",
     version="0.1.0",
 )
+app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
 def _preview(text: str, limit: int = _MESSAGE_PREVIEW_CHARS) -> str:
@@ -63,7 +70,8 @@ class LoginResponse(BaseModel):
 class SupportMessageResponse(BaseModel):
     conversation_id: str
     reply: str
-    intent: str | None = None  # populated starting Phase 2 (triage)
+    intent: Optional[Intent] = None
+    citations: Optional[List[str]] = None
     trace_id: str
     responded_at: str
 
@@ -75,6 +83,21 @@ def health() -> dict:
         "llm_base_url": LLM_BASE_URL,
         "llm_model": LLM_MODEL,
     }
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/login")
+
+
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/chat")
+def chat_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "chat.html")
 
 
 def _issue_token(subject_id: str, role: UserRole) -> LoginResponse:
@@ -119,6 +142,29 @@ def deny_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) 
     return approval
 
 
+def _build_support_response(conversation_id: str, result_state: ConversationState) -> SupportMessageResponse:
+    # Maps internal ConversationState.results onto the API's chat shape — see DECISIONS.md.
+    non_empty = [r for r in result_state.results if r.result]
+    if not non_empty:
+        reply = "Sorry, I wasn't able to process that."
+        intent = None
+        citations = None
+    else:
+        reply = "\n\n".join(r.result for r in non_empty)
+        final = non_empty[-1]
+        intent = final.intent
+        citations = final.citations
+
+    return SupportMessageResponse(
+        conversation_id=conversation_id,
+        reply=reply,
+        intent=intent,
+        citations=citations,
+        trace_id=str(uuid4()),
+        responded_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
 @app.post("/support/message", response_model=SupportMessageResponse)
 def support_message(
     payload: SupportMessageRequest,
@@ -141,14 +187,9 @@ def support_message(
                 message=payload.message,
             )
 
-            result = app_graph.invoke(state)
+            raw_result = app_graph.invoke(state)
+            result_state = ConversationState.model_validate(raw_result)
 
-            response = SupportMessageResponse(
-                conversation_id=payload.conversation_id,
-                reply=f"{result}",
-                intent=None,
-                trace_id=str(uuid4()),
-                responded_at=datetime.now(timezone.utc).isoformat(),
-            )
+            response = _build_support_response(payload.conversation_id, result_state)
 
         return response

@@ -12,7 +12,9 @@ and why: see `DECISIONS.md`. Eval results: see `EVALS.md` (from Phase 12 on).
 **Status: Phase 5 in progress (LangGraph wiring).** Triage, structured
 lookups, and RAG are wired into a graph. Sandbox data now lives in Postgres
 (not JSON files), and staff/customer JWT auth is in place — see
-`DECISIONS.md` for the infra-detour writeup.
+`DECISIONS.md` for the infra-detour writeup. A minimal customer login +
+chatbot UI now sits on top of that auth (see "Customer UI" below), also
+written up in `DECISIONS.md`.
 
 ## Quick start
 
@@ -56,6 +58,21 @@ curl http://localhost:8000/approvals -H "Authorization: Bearer <staff_access_tok
 `customer_id` is derived from the token, not passed in the request body —
 see `DECISIONS.md`.
 
+## Customer UI
+
+With the app running (see below), open **http://localhost:8000/** in a
+browser — it redirects to `/login`. Log in with any seeded customer email
+(`db/init/006_seed_customers.sql`) and password `customer-demo-pass`; on
+success you land on `/chat`, a minimal chat UI that calls
+`POST /support/message` with the JWT attached. "Log out" clears the token
+and returns to `/login`; visiting `/chat` without a valid token bounces you
+back there too.
+
+Static, no build step — plain HTML/CSS/vanilla JS served directly by
+FastAPI (`static/`). No staff-facing UI exists; staff/approvals stay
+API-only. See `DECISIONS.md` for the stack choice and token-storage
+tradeoff.
+
 ### Running without Docker
 
 ```bash
@@ -77,6 +94,8 @@ docs/           Store policy docs used for RAG (includes a deliberate
                 contradiction between return-policy.md and warranty.md)
 models/         Pydantic models (one per file)
 services/       Postgres-backed data access + business logic (one per file)
+static/         Customer login + chat UI — static HTML/CSS/vanilla JS,
+                served directly by FastAPI, no build step
 tests/          Eval suite and unit tests (from Phase 12); a few validate_*.py
                 scripts exercise services directly against the seeded DB
 ```
