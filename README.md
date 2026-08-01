@@ -9,27 +9,52 @@ evals, tracing, and a small LoRA fine-tune, all measured rather than assumed.
 Full build plan and rationale: see `PLAN.md`. Decisions made along the way,
 and why: see `DECISIONS.md`. Eval results: see `EVALS.md` (from Phase 12 on).
 
-**Status: Phase 1 — skeleton.** One endpoint, hardcoded response. Real triage
-and routing start in Phase 2.
+**Status: Phase 5 in progress (LangGraph wiring).** Triage, structured
+lookups, and RAG are wired into a graph. Sandbox data now lives in Postgres
+(not JSON files), and staff/customer JWT auth is in place — see
+`DECISIONS.md` for the infra-detour writeup.
 
 ## Quick start
 
 Requires [LM Studio](https://lmstudio.ai) running locally with a model loaded
-and the local server started (default port 1234).
+and the local server started (default port 1234), and Docker for Postgres.
 
 ```bash
-docker compose up --build
+docker compose up db --build
 ```
 
-Then:
+This starts Postgres and seeds it from the SQL scripts in `db/init/` —
+schema and data both, including seeded staff/customer login accounts. Then
+run the app locally (see "Running without Docker" below); the `app` service
+in `docker-compose.yml` is unmaintained scaffolding, not the working path.
+
+Log in to get a token, then call the endpoints with it:
 
 ```bash
 curl http://localhost:8000/health
 
+# Customer login (seeded demo accounts — see db/init/006_seed_customers.sql)
+curl -X POST http://localhost:8000/auth/customer/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "marcus.ito@example.com", "password": "customer-demo-pass"}'
+# -> {"access_token": "...", "token_type": "bearer", "expires_in": 3600}
+
 curl -X POST http://localhost:8000/support/message \
   -H "Content-Type: application/json" \
-  -d '{"conversation_id": "c1", "customer_id": "cust_002", "message": "Where is my order?"}'
+  -H "Authorization: Bearer <access_token>" \
+  -d '{"conversation_id": "c1", "message": "Where is my order?"}'
+
+# Staff login (separate endpoint/service — see db/init/012_seed_staff_users.sql),
+# for the approval queue
+curl -X POST http://localhost:8000/auth/staff/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "staff@rubato.test", "password": "staff-demo-pass"}'
+
+curl http://localhost:8000/approvals -H "Authorization: Bearer <staff_access_token>"
 ```
+
+`customer_id` is derived from the token, not passed in the request body —
+see `DECISIONS.md`.
 
 ### Running without Docker
 
@@ -38,14 +63,22 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
+Requires `POSTGRES_DSN` pointing at a running Postgres instance (defaults to
+the docker-compose one on `localhost:5432`) and a `JWT_SECRET_KEY` set for
+anything beyond local dev — see `app/config.py`.
+
 ## Project layout
 
 ```
-app/            FastAPI app, config, (later) graph/agent code
-data/           Sandbox store data: products, orders, customers, return history
+app/            FastAPI app, config, auth, (later) graph/agent code
+db/init/        Numbered SQL: schema + seed data, run automatically on first
+                Postgres container init
 docs/           Store policy docs used for RAG (includes a deliberate
                 contradiction between return-policy.md and warranty.md)
-tests/          Eval suite and unit tests (from Phase 12)
+models/         Pydantic models (one per file)
+services/       Postgres-backed data access + business logic (one per file)
+tests/          Eval suite and unit tests (from Phase 12); a few validate_*.py
+                scripts exercise services directly against the seeded DB
 ```
 
 ## Why this domain

@@ -13,7 +13,6 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./app:/srv/app
-      - ./data:/srv/data
       - ./docs:/srv/docs
     depends_on:
       - db

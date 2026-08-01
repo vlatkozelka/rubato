@@ -8,17 +8,25 @@ goes on top of it.
 """
 import logging
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app.config import LLM_BASE_URL, LLM_MODEL
+from app.auth import require_customer, require_staff
+from app.config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES, LLM_BASE_URL, LLM_MODEL
 from app.conversation_log_filter import conversation_context
 from app.logging_setup import configure_logging
+from app.security import create_access_token
 from app.timing import log_duration
 from graph.state_graph import app_graph
+from models.approval import Approval
+from models.auth_principal import AuthPrincipal
 from models.conversation_state import ConversationState
+from models.user_role import UserRole
+from services.approval_service import list_pending_approvals, set_approval_status
+from services.customer_auth_service import authenticate_customer
+from services.staff_auth_service import authenticate_staff
 
 configure_logging()
 logger = logging.getLogger("rubato.api")
@@ -38,8 +46,18 @@ def _preview(text: str, limit: int = _MESSAGE_PREVIEW_CHARS) -> str:
 
 class SupportMessageRequest(BaseModel):
     conversation_id: str = Field(..., description="Stable ID for this conversation thread")
-    customer_id: str = Field(..., description="Customer placing the request")
     message: str = Field(..., description="Raw customer message text")
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
 
 
 class SupportMessageResponse(BaseModel):
@@ -59,14 +77,60 @@ def health() -> dict:
     }
 
 
+def _issue_token(subject_id: str, role: UserRole) -> LoginResponse:
+    token = create_access_token(subject_id, role)
+    return LoginResponse(access_token=token, expires_in=JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
+
+@app.post("/auth/customer/login", response_model=LoginResponse)
+def customer_login(payload: LoginRequest) -> LoginResponse:
+    customer = authenticate_customer(payload.email, payload.password)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return _issue_token(customer.id, UserRole.CUSTOMER)
+
+
+@app.post("/auth/staff/login", response_model=LoginResponse)
+def staff_login(payload: LoginRequest) -> LoginResponse:
+    staff = authenticate_staff(payload.email, payload.password)
+    if staff is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return _issue_token(staff.id, UserRole.STAFF)
+
+
+@app.get("/approvals", response_model=list[Approval])
+def get_approvals(_: AuthPrincipal = Depends(require_staff)) -> list[Approval]:
+    return list_pending_approvals()
+
+
+@app.post("/approvals/{approval_id}/approve", response_model=Approval)
+def approve_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) -> Approval:
+    approval = set_approval_status(approval_id, "approved")
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    return approval
+
+
+@app.post("/approvals/{approval_id}/deny", response_model=Approval)
+def deny_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) -> Approval:
+    approval = set_approval_status(approval_id, "denied")
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    return approval
+
+
 @app.post("/support/message", response_model=SupportMessageResponse)
-def support_message(payload: SupportMessageRequest) -> SupportMessageResponse:
+def support_message(
+    payload: SupportMessageRequest,
+    principal: AuthPrincipal = Depends(require_customer),
+) -> SupportMessageResponse:
+    customer_id = principal.customer_id
     with conversation_context(payload.conversation_id):
         logger.info(
             "request_received",
             extra={
                 "event": "request_received",
-                "customer_id": payload.customer_id,
+                "customer_id": customer_id,
                 "message_preview": _preview(payload.message),
             },
         )

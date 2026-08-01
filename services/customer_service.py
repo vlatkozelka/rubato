@@ -1,18 +1,27 @@
-import json
+import logging
 from typing import Optional
 
-from app.config import DATA_DIR
+import psycopg
+
+from app.config import POSTGRES_DSN
 from models.customer import Customer
 
-
-def _load_customers() -> list[dict]:
-    path = DATA_DIR / "customers.json"
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+logger = logging.getLogger("rubato.services.customer")
 
 
 def get_customer_by_id(customer_id: str) -> Optional[Customer]:
-    for raw in _load_customers():
-        if raw["id"] == customer_id:
-            return Customer(**raw)
-    return None
+    conn = psycopg.connect(POSTGRES_DSN)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, name, email, tier FROM customers WHERE id = %s",
+        (customer_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if row is None:
+        return None
+
+    id_, name, email, tier = row
+    return Customer(id=id_, name=name, email=email, tier=tier)
