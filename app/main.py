@@ -23,8 +23,10 @@ from graph.state_graph import app_graph
 from models.approval import Approval
 from models.auth_principal import AuthPrincipal
 from models.conversation_state import ConversationState
+from models.user_role import UserRole
 from services.approval_service import list_pending_approvals, set_approval_status
-from services.user_service import authenticate_user
+from services.customer_auth_service import authenticate_customer
+from services.staff_auth_service import authenticate_staff
 
 configure_logging()
 logger = logging.getLogger("rubato.api")
@@ -75,13 +77,25 @@ def health() -> dict:
     }
 
 
-@app.post("/auth/login", response_model=LoginResponse)
-def login(payload: LoginRequest) -> LoginResponse:
-    user = authenticate_user(payload.email, payload.password)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(user)
+def _issue_token(subject_id: str, role: UserRole) -> LoginResponse:
+    token = create_access_token(subject_id, role)
     return LoginResponse(access_token=token, expires_in=JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+
+
+@app.post("/auth/customer/login", response_model=LoginResponse)
+def customer_login(payload: LoginRequest) -> LoginResponse:
+    customer = authenticate_customer(payload.email, payload.password)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return _issue_token(customer.id, UserRole.CUSTOMER)
+
+
+@app.post("/auth/staff/login", response_model=LoginResponse)
+def staff_login(payload: LoginRequest) -> LoginResponse:
+    staff = authenticate_staff(payload.email, payload.password)
+    if staff is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return _issue_token(staff.id, UserRole.STAFF)
 
 
 @app.get("/approvals", response_model=list[Approval])

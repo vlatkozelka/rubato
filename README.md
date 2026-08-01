@@ -33,8 +33,8 @@ Log in to get a token, then call the endpoints with it:
 ```bash
 curl http://localhost:8000/health
 
-# Customer login (seeded demo accounts — see db/init/012_seed_users.sql)
-curl -X POST http://localhost:8000/auth/login \
+# Customer login (seeded demo accounts — see db/init/006_seed_customers.sql)
+curl -X POST http://localhost:8000/auth/customer/login \
   -H "Content-Type: application/json" \
   -d '{"email": "marcus.ito@example.com", "password": "customer-demo-pass"}'
 # -> {"access_token": "...", "token_type": "bearer", "expires_in": 3600}
@@ -44,8 +44,9 @@ curl -X POST http://localhost:8000/support/message \
   -H "Authorization: Bearer <access_token>" \
   -d '{"conversation_id": "c1", "message": "Where is my order?"}'
 
-# Staff login, for the approval queue
-curl -X POST http://localhost:8000/auth/login \
+# Staff login (separate endpoint/service — see db/init/012_seed_staff_users.sql),
+# for the approval queue
+curl -X POST http://localhost:8000/auth/staff/login \
   -H "Content-Type: application/json" \
   -d '{"email": "staff@rubato.test", "password": "staff-demo-pass"}'
 

@@ -208,15 +208,23 @@ storing `product_id` and joining to `products` for display. This matches what
 since a historical order should keep showing what the customer actually paid,
 even if the product is later renamed or repriced.
 
-**Users table:** one `users` table with a `role` CHECK ('staff'/'customer')
-and a nullable `customer_id` FK, instead of a separate `staff_users` table.
-Staff and customer accounts authenticate identically (email + password_hash,
-one `/auth/login` endpoint, one JWT shape); the only structural difference is
+**Users table — SUPERSEDED, see "Customers own their own auth" below.**
+~~One `users` table with a `role` CHECK ('staff'/'customer') and a nullable
+`customer_id` FK, instead of a separate `staff_users` table. Staff and
+customer accounts authenticate identically (email + password_hash, one
+`/auth/login` endpoint, one JWT shape); the only structural difference is
 whether a customer link exists, which one nullable column and a
 `CHECK ((role = 'customer') = (customer_id IS NOT NULL))` constraint express
 without a second parallel schema. Same reasoning as the `status_kind` +
 nullable-column choice above — a discriminator column over a second table
-when the two cases share almost everything.
+when the two cases share almost everything.~~ Reconsidered almost
+immediately: the customer↔user relationship this modeled is strictly 1:1
+(every seeded customer has exactly one login, never zero or several), so
+the "discriminator column over a second table" argument didn't actually
+apply — there was no real 1:many relationship being simplified, just an
+extra table plus a duplicated `email` column (`customers.email` and
+`users.email`, nothing keeping them in sync). Kept here, not deleted, per
+this file's own convention for superseded entries.
 
 **JWT, no refresh token:** access tokens only, 60-minute expiry
 (`JWT_ACCESS_TOKEN_EXPIRE_MINUTES`), no refresh token or rotation. This is a
@@ -281,8 +289,9 @@ here. `POST /approvals/{id}/approve` currently only flips `status` to
 work.
 
 **Not pooling DB connections.** `order_service.py`, `customer_service.py`,
-`product_service.py`, `user_service.py`, and `approval_service.py` all open a
-new `psycopg.connect()` per call, same as the pre-existing
+`product_service.py`, `customer_auth_service.py`, `staff_auth_service.py`,
+and `approval_service.py` all open a new `psycopg.connect()` per call, same
+as the pre-existing
 `retrieval_service.py`/`index_docs.py` pattern. Consistent with what was
 already there, not a new decision, but flagging it as a known follow-up:
 worth moving to a shared connection pool (`psycopg_pool`) once request volume
@@ -294,17 +303,46 @@ backend has had compatibility breakage against bcrypt >=4.x releases
 direct `bcrypt.hashpw`/`bcrypt.checkpw` calls in `app/security.py` are a
 three-line wrapper — not enough surface for an abstraction layer to earn its
 keep. Seed passwords are generated via pgcrypto's `crypt(password,
-gen_salt('bf', 10))` directly in `db/init/012_seed_users.sql`, which produces
-standard `$2a$` bcrypt hashes that `bcrypt.checkpw` reads without any
-Python-side seeding step — verified compatible in testing.
+gen_salt('bf', 10))` directly in `db/init/006_seed_customers.sql` and
+`db/init/012_seed_staff_users.sql`, which produces standard `$2a$` bcrypt
+hashes that `bcrypt.checkpw` reads without any Python-side seeding step —
+verified compatible in testing.
 
-**No self-serve registration.** Seed data only (`db/init/012_seed_users.sql`):
-one staff account (`staff@rubato.test`) and one customer account per seeded
-customer, sharing a fixed demo password documented in `README.md`. This is a
+**No self-serve registration.** Seed data only: one staff account
+(`staff@rubato.test`, `db/init/012_seed_staff_users.sql`) and one customer
+account per seeded customer (`db/init/006_seed_customers.sql`), each side
+sharing its own fixed demo password documented in `README.md`. This is a
 portfolio sandbox with a fixed cast of customers; a registration endpoint
 would be unused surface with no real signup flow behind it (no email
 verification, no self-serve UI) — explicitly out of scope per the task this
 detour was scoped from.
+
+**Customers own their own auth; staff get a separate, minimal table.**
+Reworked the "Users table" decision above after a review question: does
+splitting *login* into two services (a customer login and a staff login,
+each reflecting a distinct future UI) complicate every call site that
+requires auth? It doesn't, because `password_hash` now lives directly on
+`customers` (removing the duplicated-email problem the old `users` table
+had) and staff get their own `staff_users` table with no FK back to
+`customers` and no `role` column at all — membership in that table already
+means "staff". `services/customer_auth_service.py` and
+`services/staff_auth_service.py` are the two login-side services the user
+asked for, each returning its own domain model (`Customer` / `StaffUser`).
+
+What stayed the same, and why this didn't ripple into every auth-gated
+route: verification and authorization were already decoupled from *which*
+login issued the token. `app/auth.py`'s `get_current_principal` /
+`require_staff` / `require_customer` dependencies only ever produce and
+check `models/auth_principal.py`'s `AuthPrincipal` (`sub`, `role: UserRole`,
+`customer_id`) — never a `Customer` or `StaffUser` object directly. So
+splitting the login services only touched the two `/auth/*/login` routes
+and `app/security.py`'s `create_access_token`, which now takes
+`(subject_id: str, role: UserRole)` instead of a table-backed `User` model.
+`app/auth.py` needed zero changes. This is also why the JWT no longer
+carries a separate `customer_id` claim: a customer's own `id` (e.g.
+`cust_001`) is already their login row's id, so `sub` doubles as
+`customer_id` when `role == customer` — `decode_access_token` sets
+`customer_id = sub` for that role and `None` for staff.
 
 ## Open questions to answer as later phases land
 
