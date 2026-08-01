@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rubato — Staff Dashboard</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div class="card dashboard-shell">
+    <div class="chat-header">
+      <h1>Rubato staff console</h1>
+      <button type="button" id="logout-btn">Log out</button>
+    </div>
+
+    <div class="dashboard-body">
+      <section class="dashboard-section">
+        <h2>Pending refund approvals</h2>
+        <div class="status-msg" id="approvals-status"></div>
+        <div id="approvals-list"></div>
+      </section>
+
+      <section class="dashboard-section">
+        <h2>Products</h2>
+        <div class="status-msg" id="products-status"></div>
+        <table class="product-table" id="product-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Size</th>
+              <th>Price</th>
+              <th>Stock</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="products-body"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+  <script src="/assets/admin_dashboard.js"></script>
+</body>
+</html>

@@ -16,6 +16,36 @@ def _row_to_product(row) -> Product:
     return Product(id=id_, name=name, price=float(price), category=category, size=size, stock=stock)
 
 
+def list_products() -> List[Product]:
+    conn = psycopg.connect(POSTGRES_DSN)
+    cur = conn.cursor()
+    cur.execute(f"SELECT {_COLUMNS} FROM products ORDER BY name")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [_row_to_product(r) for r in rows]
+
+
+def update_product(product_id: str, fields: dict) -> Optional[Product]:
+    """fields keys are trusted column names from ProductUpdate (see routers/products.py),
+    never raw user input, so building the SET clause from them is safe."""
+    if not fields:
+        return get_product_by_id(product_id)
+
+    set_clause = ", ".join(f"{column} = %s" for column in fields)
+    conn = psycopg.connect(POSTGRES_DSN)
+    cur = conn.cursor()
+    cur.execute(
+        f"UPDATE products SET {set_clause} WHERE id = %s RETURNING {_COLUMNS}",
+        (*fields.values(), product_id),
+    )
+    row = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+    return _row_to_product(row) if row else None
+
+
 def get_product_by_id(product_id: str) -> Optional[Product]:
     conn = psycopg.connect(POSTGRES_DSN)
     cur = conn.cursor()

@@ -28,6 +28,7 @@ from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.user_role import UserRole
 from routers.approvals import router as approvals_router
+from routers.products import router as products_router
 from services.customer_auth_service import authenticate_customer
 from services.staff_auth_service import authenticate_staff
 
@@ -45,6 +46,7 @@ app = FastAPI(
 )
 app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 app.include_router(approvals_router)
+app.include_router(products_router)
 
 
 def _preview(text: str, limit: int = _MESSAGE_PREVIEW_CHARS) -> str:
@@ -98,6 +100,16 @@ def login_page() -> FileResponse:
 @app.get("/chat")
 def chat_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "chat.html")
+
+
+@app.get("/admin")
+def admin_login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "admin_login.html")
+
+
+@app.get("/admin/dashboard")
+def admin_dashboard_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "admin_dashboard.html")
 
 
 def _issue_token(subject_id: str, role: UserRole) -> LoginResponse:

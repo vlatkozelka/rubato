@@ -69,9 +69,29 @@ and returns to `/login`; visiting `/chat` without a valid token bounces you
 back there too.
 
 Static, no build step — plain HTML/CSS/vanilla JS served directly by
-FastAPI (`static/`). No staff-facing UI exists; staff/approvals stay
-API-only. See `DECISIONS.md` for the stack choice and token-storage
-tradeoff.
+FastAPI (`static/`). See `DECISIONS.md` for the stack choice and
+token-storage tradeoff.
+
+## Staff UI
+
+Open **http://localhost:8000/admin** — a separate login page from the
+customer one, backed by `POST /auth/staff/login` and the `staff_users`
+table (`db/init/011_create_staff_users.sql`), not the customer table. Log
+in with `staff@rubato.test` / `staff-demo-pass`; on success you land on
+`/admin/dashboard`, which lists pending refund approvals (calling the
+existing `GET /approvals`, with Approve/Deny buttons wired to
+`POST /approvals/{id}/approve` and `/deny`) and an editable product table
+(`GET /products`, `PATCH /products/{id}`).
+
+The staff JWT carries `role: staff` (issued the same way as the customer
+`role: customer` token — same `create_access_token`, same
+`Authorization: Bearer` header, same `sessionStorage` mechanics, just
+under its own key `rubato_staff_token` so the two never collide in the
+same browser tab) and is checked by `require_staff` on every admin/staff
+endpoint, so a customer token is rejected (403) by staff endpoints and a
+staff token is rejected by customer endpoints (e.g. `/support/message`)
+— see `app/auth.py`. Visiting `/admin/dashboard` without a valid staff
+token bounces you back to `/admin`, same pattern as `/chat`.
 
 ### Running without Docker
 
