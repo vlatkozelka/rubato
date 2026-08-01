@@ -499,6 +499,34 @@ returning, no service/domain object leaking through. `/support/message`
 was the only endpoint actually returning an unserialized object dump; no
 changes were needed elsewhere for "ideally all endpoints."
 
+
+## Refund Eligibility: RAG-Backed Policy Window, Not Hardcoded
+
+**Decision:** `refund_service.check_refund` retrieves the applicable refund
+window (`allowed_duration`) via RAG (`get_refund_policy`, a structured
+`instructor` call over retrieved policy chunks) rather than hardcoding
+per-category day counts in code.
+
+**Why:** The window itself lives in `return-policy.md` / `warranty.md` and is
+legal/business-owned, editable content — not application logic. Hardcoding it
+would mean every policy change (legal updates the electronics window from 14
+to 21 days) requires a code change and redeploy. With RAG, the same change is
+a document edit + re-embed; `refund_service` picks it up on the next call with
+zero code touched.
+
+**Split preserved:** The window *lookup* is non-deterministic (LLM +
+retrieval, appropriate since the source is unstructured prose). The
+eligibility *decision* (`days_since_delivery <= allowed_duration`) stays
+deterministic, in code, since it's pure arithmetic with no ambiguity to
+resolve. RAG is used only where determinism isn't achievable for free;
+everything else stays deterministic, especially since this sits on the
+money-moving path.
+
+**Verified:** order `ord_1001`, category `electronics`, delivered 27 days ago,
+policy correctly retrieved a 14-day window, correctly denied. Confirms the
+window is genuinely coming from the document, not a coincidental hardcoded
+match.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency

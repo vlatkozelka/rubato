@@ -1,4 +1,4 @@
-from services.policy_qa_service import answer_policy_question
+from services.policy_service import answer_policy_question
 
 result = answer_policy_question("How many days do I have to return an opened software license?")
 print(f"{result}\n\n\n\n")

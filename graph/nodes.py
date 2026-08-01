@@ -9,7 +9,7 @@ from models.order import Order
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
 from models.product import Product
 from services.order_service import get_order_by_id
-from services.policy_qa_service import answer_policy_question
+from services.policy_service import answer_policy_question
 from services.product_service import get_products_by_name
 from services.triage_service import triage_message
 
@@ -62,7 +62,8 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
 
 def format_price_matches(products: List[Product]) -> str:
     lines = [
-        f"- {p.name} ({p.size}): ${p.price:.2f}" + ("" if p.stock > 0 else " — out of stock")
+        f"- {p.name}{f' ({p.size})' if p.size else ''}: ${p.price:.2f}"
+        + ("" if p.stock > 0 else " — out of stock")
         for p in products
     ]
     return "Here's what I found:\n" + "\n".join(lines)
