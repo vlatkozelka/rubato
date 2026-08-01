@@ -5,7 +5,7 @@ from langgraph.graph import StateGraph
 
 from graph.instrumentation import instrumented_node
 from graph.nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node, greet_node, \
-    composite_node
+    composite_node, refund_request_node, return_request_node
 from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.node_id import NodeId
@@ -20,6 +20,8 @@ graph.add_node(NodeId.ANSWER_POLICY_QUESTION,
                instrumented_node(NodeId.ANSWER_POLICY_QUESTION.value, answer_policy_question_node))
 graph.add_node(NodeId.GREET, instrumented_node(NodeId.GREET.value, greet_node))
 graph.add_node(NodeId.HANDLE_COMPOSITE, instrumented_node(NodeId.HANDLE_COMPOSITE.value, composite_node))
+graph.add_node(NodeId.HANDLE_REFUND_REQUEST, instrumented_node(NodeId.HANDLE_REFUND_REQUEST.value, refund_request_node))
+graph.add_node(NodeId.HANDLE_RETURN_REQUEST, instrumented_node(NodeId.HANDLE_RETURN_REQUEST.value, return_request_node))
 graph.set_entry_point(NodeId.TRIAGE)
 
 
@@ -72,9 +74,9 @@ path_map = {
     NodeId.ANSWER_POLICY_QUESTION: NodeId.ANSWER_POLICY_QUESTION,
     NodeId.GREET: NodeId.GREET,
     NodeId.HANDLE_COMPOSITE: NodeId.HANDLE_COMPOSITE,
+    NodeId.HANDLE_RETURN_REQUEST: NodeId.HANDLE_RETURN_REQUEST,
+    NodeId.HANDLE_REFUND_REQUEST: NodeId.HANDLE_REFUND_REQUEST,
     # everything else routes to END until those nodes exist
-    NodeId.HANDLE_RETURN_REQUEST: END,
-    NodeId.HANDLE_REFUND_REQUEST: END,
     NodeId.ASSIGN_TO_HUMAN: END,
     NodeId.PROCESS_COMPLEX_CASE: END,
 }
@@ -88,6 +90,8 @@ graph.add_edge(NodeId.CHECK_ORDER_STATUS, END)
 graph.add_edge(NodeId.CHECK_PRICE, END)
 graph.add_edge(NodeId.ANSWER_POLICY_QUESTION, END)
 graph.add_edge(NodeId.GREET, END)
+graph.add_edge(NodeId.HANDLE_REFUND_REQUEST, END)
+graph.add_edge(NodeId.HANDLE_RETURN_REQUEST, END)
 graph.add_conditional_edges(NodeId.HANDLE_COMPOSITE, traverse, path_map)
 
 app_graph = graph.compile()
