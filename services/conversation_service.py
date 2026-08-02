@@ -4,8 +4,9 @@ from datetime import datetime, timezone
 from typing import List
 
 import psycopg
+from openai import AsyncOpenAI
 
-from app.config import POSTGRES_DSN
+from app.config import POSTGRES_DSN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from models.turn import Turn
 
 logger = logging.getLogger("rubato.services.conversation")
@@ -39,6 +40,8 @@ async def save_conversation_turn(
     history.append(Turn(role="user", content=user_message, timestamp=now))
     history.append(Turn(role="assistant", content=assistant_message, timestamp=now))
 
+    history = await _compact_if_needed(history)
+
     serialized = json.dumps([t.model_dump(mode="json") for t in history])
 
     conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
@@ -56,3 +59,48 @@ async def save_conversation_turn(
     await conn.commit()
     await cur.close()
     await conn.close()
+
+
+HISTORY_TOKEN_BUDGET = 100  # rough char/4 estimate, not exact tokenization
+KEEP_VERBATIM_TURNS = 6
+
+plain_client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+
+
+def _estimate_tokens(turns: list[Turn]) -> int:
+    total_chars = sum(len(t.content) for t in turns)
+    return total_chars // 4
+
+
+async def _summarize_turns(turns: list[Turn]) -> Turn:
+    transcript = "\n".join(f"{t.role}: {t.content}" for t in turns)
+    response = await plain_client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "Summarize this customer support exchange in 2-4 sentences. "
+                    "Preserve concrete facts: order IDs, decisions made, amounts, "
+                    "and outcomes. Drop pleasantries and small talk."
+                ),
+            },
+            {"role": "user", "content": transcript},
+        ],
+    )
+    summary_text = response.choices[0].message.content
+    content = f"[Earlier conversation summary]: {summary_text}"
+    return Turn(role="assistant", content=content, timestamp=datetime.now(timezone.utc))
+
+
+async def _compact_if_needed(history: list[Turn]) -> list[Turn]:
+    if _estimate_tokens(history) <= HISTORY_TOKEN_BUDGET:
+        return history
+
+    verbatim_tail = history[-KEEP_VERBATIM_TURNS:]
+    older = history[:-KEEP_VERBATIM_TURNS]
+    if not older:
+        return history  # nothing old enough to summarize, budget just tight
+
+    summary_turn = await _summarize_turns(older)
+    return [summary_turn, *verbatim_tail]

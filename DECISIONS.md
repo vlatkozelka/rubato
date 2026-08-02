@@ -564,6 +564,28 @@ continuation, including running eligibility and correctly denying it on
 the return window.
 
 
+## Phase 8 — Token-budget summarization
+
+History above HISTORY_TOKEN_BUDGET (3000, ~12K chars) gets compacted:
+last 6 turns kept verbatim, everything older collapsed into one
+LLM-generated summary turn. Token estimate is a char/4 heuristic — no
+local tokenizer available via LM Studio's API, so this is approximate.
+
+Summary turn uses role="assistant" (prefixed "[Earlier conversation
+summary]: ..."), not role="system" — most chat-completion APIs only
+support system as the leading message. Using assistant keeps the
+sequence in the alternation triage already expects.
+
+Budget is 3000 despite the local model's 256K context window —
+deliberate, not a hardware constraint. Lost-in-the-middle degradation
+and per-request latency/cost don't go away just because the window is
+big; the budget reflects what triage needs to classify correctly, not
+what the model can technically hold.
+
+Compaction runs in save_conversation_turn, after appending new turns
+and before the write, so Postgres always holds the current-best
+representation rather than re-summarizing on every load.
+
 
 ## Open questions to answer as later phases land
 
