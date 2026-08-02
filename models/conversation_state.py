@@ -3,6 +3,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 from models.customer import Customer
+from models.customer_profile import CustomerProfile
 from models.intent_result import IntentResult
 from models.order import Order
 from models.triage_result import TriageResult
@@ -19,3 +20,4 @@ class ConversationState(BaseModel):
     results: List[IntentResult] = Field(default_factory=list)
     escalated_to: Optional[str] = None
     history: List[Turn] = Field(default_factory=list)
+    customer_profile: Optional[CustomerProfile] = None

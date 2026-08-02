@@ -586,6 +586,32 @@ Compaction runs in save_conversation_turn, after appending new turns
 and before the write, so Postgres always holds the current-best
 representation rather than re-summarizing on every load.
 
+---
+
+## Phase 8 — customer_profiles: long-term memory, minimal and write-path complete
+
+Added customer_profiles (customer_id PK, refund_request_count,
+last_contacted_at, notes) as a deliberate portfolio artifact for the
+"long-term memory, structured, not RAG" concept — not blocking any
+functional need. Phase 9's return-history abuse check is better served
+as a plain on-demand lookup, same pattern as order_service, not folded
+into this table.
+
+Kept to columns with non-redundant justification vs. existing data
+(customers table, orders, return_history.json). Seeded non-uniformly
+across cust_001-006 for realistic test fixtures.
+
+Initially shipped as read-only (seeded, no setters) — caught as a real
+gap, not "memory" if nothing writes to it. Added update_last_contacted
+(every request) and increment_refund_request_count, fired only on
+genuine refund decision outcomes (approved or denied), not on
+incomplete requests or pre-decision rejections.
+
+notes deliberately has no setter yet. Considered an LLM-generated note
+past a request-count threshold, but whether it should be stored at all
+vs. computed on-demand at the point of actual use has no answer without
+a real consumer — deferred to whichever phase first reads it.
+
 
 ## Open questions to answer as later phases land
 

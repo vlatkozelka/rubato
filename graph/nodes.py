@@ -13,6 +13,7 @@ from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus,
 from models.policy_answer import PolicyAnswer
 from models.product import Product
 from models.triage_result import TriageResult
+from services.customer_service import increment_refund_request_count
 
 logger = logging.getLogger("rubato.nodes")
 
@@ -153,8 +154,12 @@ async def refund_request_node(state: ConversationState) -> ConversationState:
             IntentResult(intent=Intent.REFUND_REQUEST, result="I couldn't process a refund for that order."))
         return state
 
+
     create_result = await call_tool("create_approval_tool", {"approval": approval.model_dump(mode="json")})
     approval = Approval.model_validate(create_result.structuredContent)
+
+    await increment_refund_request_count(state.customer_id)
+
     if approval.status == ApprovalStatus.DENIED:
         message = f"I'm sorry, I can't approve this refund: {approval.payload.reason}"
     else:
