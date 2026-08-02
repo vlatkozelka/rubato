@@ -1,29 +1,31 @@
 import logging
-from typing import List
+from typing import List, Optional
 
 from app.timing import log_duration
 from mcp_client.client import call_tool
-from models.approval import ApprovalStatus
+from models.approval import Approval, ApprovalStatus
 from models.conversation_state import ConversationState
 from models.intent import Intent
 from models.intent_result import IntentResult
 from models.order import Order
+from models.order_item import OrderItem
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
+from models.policy_answer import PolicyAnswer
 from models.product import Product
-from services.approval_service import create_approval
-from services.order_service import get_order_by_id
-from services.policy_service import answer_policy_question
-from services.product_service import get_products_by_name
-from services.refund_service import check_refund
-from services.return_service import initiate_return
-from services.triage_service import triage_message
+from models.triage_result import TriageResult
 
 logger = logging.getLogger("rubato.nodes")
 
 
+async def _get_order(order_id: str) -> Optional[Order]:
+    result = await call_tool("get_order_by_id_tool", {"order_id": order_id})
+    order_data = result.structuredContent["result"]
+    return Order.model_validate(order_data) if order_data else None
+
+
 async def triage_node(state: ConversationState) -> ConversationState:
-    result = await triage_message(state.message)
-    state.triage_result = result
+    result = await call_tool("triage_message_tool", {"message": state.message})
+    state.triage_result = TriageResult.model_validate(result.structuredContent)
     return state
 
 
@@ -47,7 +49,7 @@ async def check_order_status_node(state: ConversationState) -> ConversationState
         order_id = triage_result.order_id
         if order_id is not None:
             with log_duration(logger, "order_lookup_finished", order_id=order_id):
-                order = await get_order_by_id(order_id)
+                order = await _get_order(order_id)
             if order is None:
                 logger.warning("order_not_found", extra={"event": "order_not_found", "order_id": order_id})
                 state.results.append(
@@ -105,11 +107,12 @@ async def answer_policy_question_node(state: ConversationState) -> ConversationS
     if triage_result is None:
         raise ValueError("performing check_price on a conversation state with triage_result None")
     else:
-        result = await answer_policy_question(question=state.message, top_k=2)
+        result = await call_tool("answer_policy_question_tool", {"question": state.message, "top_k": 2})
+        policy_answer = PolicyAnswer.model_validate(result.structuredContent)
         state.results.append(IntentResult(
             intent=Intent.POLICY_QUESTION,
-            result=result.answer,
-            citations=result.cited_sources or None,
+            result=policy_answer.answer,
+            citations=policy_answer.cited_sources or None,
         ))
         return state
 
@@ -120,13 +123,20 @@ async def refund_request_node(state: ConversationState) -> ConversationState:
         raise ValueError("performing refund_request_node on a conversation state with triage_result None")
 
     order_id = triage_result.order_id
-    order = await get_order_by_id(order_id) if order_id else None
+    order = await _get_order(order_id) if order_id else None
 
     approval = None
     if order is not None and order.items and state.customer_id is not None:
         product_id = order.items[0].product_id
         with log_duration(logger, "refund_check_finished", order_id=order_id):
-            approval = await check_refund(order_id, product_id, state.customer_id, state.message)
+            check_result = await call_tool("check_refund_tool", {
+                "order_id": order_id,
+                "product_id": product_id,
+                "customer_id": state.customer_id,
+                "reason": state.message,
+            })
+        approval_data = check_result.structuredContent["result"]
+        approval = Approval.model_validate(approval_data) if approval_data else None
 
     if approval is None:
         logger.warning("refund_request_rejected", extra={"event": "refund_request_rejected", "order_id": order_id})
@@ -134,7 +144,8 @@ async def refund_request_node(state: ConversationState) -> ConversationState:
             IntentResult(intent=Intent.REFUND_REQUEST, result="I couldn't process a refund for that order."))
         return state
 
-    approval = await create_approval(approval)
+    create_result = await call_tool("create_approval_tool", {"approval": approval.model_dump(mode="json")})
+    approval = Approval.model_validate(create_result.structuredContent)
     if approval.status == ApprovalStatus.DENIED:
         message = f"I'm sorry, I can't approve this refund: {approval.payload.reason}"
     else:
@@ -149,13 +160,20 @@ async def return_request_node(state: ConversationState) -> ConversationState:
         raise ValueError("performing return_request_node on a conversation state with triage_result None")
 
     order_id = triage_result.order_id
-    order = await get_order_by_id(order_id) if order_id else None
+    order = await _get_order(order_id) if order_id else None
 
     item = None
     if order is not None and order.items and state.customer_id is not None:
         product_id = order.items[0].product_id
         with log_duration(logger, "return_initiation_finished", order_id=order_id):
-            item = await initiate_return(order_id, product_id, state.customer_id, state.message)
+            initiate_result = await call_tool("initiate_return_tool", {
+                "order_id": order_id,
+                "product_id": product_id,
+                "customer_id": state.customer_id,
+                "reason": state.message,
+            })
+        item_data = initiate_result.structuredContent["result"]
+        item = OrderItem.model_validate(item_data) if item_data else None
 
     if item is None:
         logger.warning("return_request_rejected", extra={"event": "return_request_rejected", "order_id": order_id})
