@@ -21,8 +21,15 @@ class Order(BaseModel):
         Raw orders.json is flat: {"status": "delivered", "delivered_at": "...", ...}.
         Reshape into the discriminated union's expected form before validation:
         {"status": {"kind": "delivered", "delivered_at": "..."}, ...}.
+
+        Idempotent: an Order round-tripped through the MCP tool arrives with
+        `status` already nested (that's what got serialized), so re-nesting
+        it here would wrap it a second time.
         """
         data = dict(data)  # don't mutate the caller's dict
+        if isinstance(data.get("status"), dict):
+            return data
+
         raw_status = data.pop("status")
         delivered_at = data.pop("delivered_at", None)
 
