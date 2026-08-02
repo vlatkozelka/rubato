@@ -157,9 +157,9 @@ def _build_support_response(conversation_id: str, result_state: ConversationStat
 
 
 @app.post("/support/message", response_model=SupportMessageResponse)
-def support_message(
-    payload: SupportMessageRequest,
-    principal: AuthPrincipal = Depends(require_customer),
+async def support_message(
+        payload: SupportMessageRequest,
+        principal: AuthPrincipal = Depends(require_customer),
 ) -> SupportMessageResponse:
     customer_id = principal.customer_id
     with conversation_context(payload.conversation_id):
@@ -179,7 +179,7 @@ def support_message(
                 customer_id=customer_id,
             )
 
-            raw_result = app_graph.invoke(state)
+            raw_result = await app_graph.ainvoke(state)
             result_state = ConversationState.model_validate(raw_result)
 
             response = _build_support_response(payload.conversation_id, result_state)

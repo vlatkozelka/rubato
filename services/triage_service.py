@@ -1,18 +1,18 @@
 import logging
 
 import instructor
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from app.timing import log_duration
+from models.conflicting_intent_pair import ConflictingIntentPair
 from models.intent import Intent
 from models.triage_result import TriageResult
-from models.conflicting_intent_pair import ConflictingIntentPair
 
 logger = logging.getLogger("rubato.services.triage")
 
 client = instructor.from_openai(
-    OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
+    AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
     mode=instructor.Mode.JSON_SCHEMA,
 )
 
@@ -96,9 +96,9 @@ classification influence the sentiment field.
 """.strip()
 
 
-def triage_message(message: str) -> TriageResult:
+async def triage_message(message: str) -> TriageResult:
     with log_duration(logger, "llm_call_finished", service="triage_service", function="triage_message"):
-        return client.chat.completions.create(
+        return await client.chat.completions.create(
             model=LLM_MODEL,
             response_model=TriageResult,
             max_retries=3,

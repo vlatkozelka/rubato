@@ -1,3 +1,5 @@
+import asyncio
+
 from services.triage_service import triage_message
 
 test_cases = [
@@ -116,7 +118,7 @@ def normalize_sub_intents(sub_intents):
 
 for case in test_cases:
     try:
-        result = triage_message(case["message"])
+        result = asyncio.run(triage_message(case["message"]))
         print(f"Result for {case} is {result}")
 
         actual_sub_intents = normalize_sub_intents(result.sub_intents)

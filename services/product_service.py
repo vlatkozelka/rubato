@@ -16,57 +16,57 @@ def _row_to_product(row) -> Product:
     return Product(id=id_, name=name, price=float(price), category=category, size=size, stock=stock)
 
 
-def list_products() -> List[Product]:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def list_products() -> List[Product]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(f"SELECT {_COLUMNS} FROM products ORDER BY name")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    await cur.execute(f"SELECT {_COLUMNS} FROM products ORDER BY name")
+    rows = await cur.fetchall()
+    await cur.close()
+    await conn.close()
     return [_row_to_product(r) for r in rows]
 
 
-def update_product(product_id: str, fields: dict) -> Optional[Product]:
+async def update_product(product_id: str, fields: dict) -> Optional[Product]:
     """fields keys are trusted column names from ProductUpdate (see routers/products.py),
     never raw user input, so building the SET clause from them is safe."""
     if not fields:
-        return get_product_by_id(product_id)
+        return await get_product_by_id(product_id)
 
     set_clause = ", ".join(f"{column} = %s" for column in fields)
-    conn = psycopg.connect(POSTGRES_DSN)
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(
+    await cur.execute(
         f"UPDATE products SET {set_clause} WHERE id = %s RETURNING {_COLUMNS}",
         (*fields.values(), product_id),
     )
-    row = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
+    row = await cur.fetchone()
+    await conn.commit()
+    await cur.close()
+    await conn.close()
     return _row_to_product(row) if row else None
 
 
-def get_product_by_id(product_id: str) -> Optional[Product]:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def get_product_by_id(product_id: str) -> Optional[Product]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(f"SELECT {_COLUMNS} FROM products WHERE id = %s", (product_id,))
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
+    await cur.execute(f"SELECT {_COLUMNS} FROM products WHERE id = %s", (product_id,))
+    row = await cur.fetchone()
+    await cur.close()
+    await conn.close()
     return _row_to_product(row) if row else None
 
 
-def get_products_by_name(name: str, limit: int = 20) -> List[Product]:
+async def get_products_by_name(name: str, limit: int = 20) -> List[Product]:
     """
     Full-text search over name (weight A) + category (weight B), ranked with
     ts_rank_cd. Falls back to pg_trgm word_similarity for typo tolerance
     (e.g. "sweter" -> "Sweater") when full-text search finds nothing — see
     DECISIONS.md for why this supersedes the old word-overlap matcher.
     """
-    conn = psycopg.connect(POSTGRES_DSN)
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
 
-    cur.execute(
+    await cur.execute(
         f"""
         SELECT {_COLUMNS}
         FROM products
@@ -76,7 +76,7 @@ def get_products_by_name(name: str, limit: int = 20) -> List[Product]:
         """,
         (name, name, limit),
     )
-    rows = cur.fetchall()
+    rows = await cur.fetchall()
 
     if not rows:
         # word_similarity (not similarity/`%`) because the query is usually a
@@ -88,7 +88,7 @@ def get_products_by_name(name: str, limit: int = 20) -> List[Product]:
         # sizes beyond a sandbox, switch to `<%` with
         # `SET pg_trgm.word_similarity_threshold` so the trigram GIN index
         # is used instead of a sequential scan.
-        cur.execute(
+        await cur.execute(
             f"""
             SELECT {_COLUMNS}
             FROM products
@@ -98,8 +98,8 @@ def get_products_by_name(name: str, limit: int = 20) -> List[Product]:
             """,
             (name, name, limit),
         )
-        rows = cur.fetchall()
+        rows = await cur.fetchall()
 
-    cur.close()
-    conn.close()
+    await cur.close()
+    await conn.close()
     return [_row_to_product(r) for r in rows]

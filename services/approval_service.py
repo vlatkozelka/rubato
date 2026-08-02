@@ -28,10 +28,10 @@ def _row_to_approval(row) -> Approval:
     )
 
 
-def create_approval(approval: Approval) -> Approval:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def create_approval(approval: Approval) -> Approval:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(
+    await cur.execute(
         f"""
         INSERT INTO approvals (id, type, status, payload, reason, created_at, updated_at)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -47,30 +47,30 @@ def create_approval(approval: Approval) -> Approval:
             approval.updated_at,
         ),
     )
-    row = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
+    row = await cur.fetchone()
+    await conn.commit()
+    await cur.close()
+    await conn.close()
     return _row_to_approval(row)
 
 
-def list_pending() -> List[Approval]:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def list_pending() -> List[Approval]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(
+    await cur.execute(
         f"SELECT {_COLUMNS} FROM approvals WHERE status = %s ORDER BY created_at",
         (ApprovalStatus.PENDING_REVIEW.value,),
     )
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    rows = await cur.fetchall()
+    await cur.close()
+    await conn.close()
     return [_row_to_approval(r) for r in rows]
 
 
-def deny(approval_id: UUID, reason: str) -> Optional[Approval]:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def deny(approval_id: UUID, reason: str) -> Optional[Approval]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(
+    await cur.execute(
         f"""
         UPDATE approvals
         SET status = %s, reason = %s, updated_at = now()
@@ -79,29 +79,29 @@ def deny(approval_id: UUID, reason: str) -> Optional[Approval]:
         """,
         (ApprovalStatus.DENIED.value, reason, str(approval_id), ApprovalStatus.PENDING_REVIEW.value),
     )
-    row = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
+    row = await cur.fetchone()
+    await conn.commit()
+    await cur.close()
+    await conn.close()
     return _row_to_approval(row) if row else None
 
 
-def approve(approval_id: UUID) -> Optional[Approval]:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def approve(approval_id: UUID) -> Optional[Approval]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(
+    await cur.execute(
         f"SELECT {_COLUMNS} FROM approvals WHERE id = %s AND status = %s",
         (str(approval_id), ApprovalStatus.PENDING_REVIEW.value),
     )
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
+    row = await cur.fetchone()
+    await cur.close()
+    await conn.close()
     if row is None:
         return None
 
     approval = _row_to_approval(row)
 
-    order = get_order_by_id(approval.payload.order_id)
+    order = await get_order_by_id(approval.payload.order_id)
     if order is None:
         logger.warning(
             "approve_order_not_found",
@@ -116,9 +116,9 @@ def approve(approval_id: UUID) -> Optional[Approval]:
 
     execute_refund(order.id, amount)
 
-    conn = psycopg.connect(POSTGRES_DSN)
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
-    cur.execute(
+    await cur.execute(
         f"""
         UPDATE approvals
         SET status = %s, payload = %s, updated_at = now()
@@ -127,8 +127,8 @@ def approve(approval_id: UUID) -> Optional[Approval]:
         """,
         (ApprovalStatus.APPROVED.value, Jsonb(approval.payload.model_dump()), str(approval_id)),
     )
-    updated_row = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
+    updated_row = await cur.fetchone()
+    await conn.commit()
+    await cur.close()
+    await conn.close()
     return _row_to_approval(updated_row)
