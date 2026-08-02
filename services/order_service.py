@@ -10,27 +10,27 @@ from models.order_item import OrderItem
 logger = logging.getLogger("rubato.services.order")
 
 
-def get_order_by_id(order_id: str) -> Optional[Order]:
-    conn = psycopg.connect(POSTGRES_DSN)
+async def get_order_by_id(order_id: str) -> Optional[Order]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
 
-    cur.execute(
+    await cur.execute(
         "SELECT id, customer_id, status_kind, delivered_at, date, total FROM orders WHERE id = %s",
         (order_id,),
     )
-    order_row = cur.fetchone()
+    order_row = await cur.fetchone()
     if order_row is None:
-        cur.close()
-        conn.close()
+        await cur.close()
+        await conn.close()
         return None
 
-    cur.execute(
+    await cur.execute(
         "SELECT product_id, name, qty, price, size FROM order_items WHERE order_id = %s ORDER BY id",
         (order_id,),
     )
-    item_rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    item_rows = await cur.fetchall()
+    await cur.close()
+    await conn.close()
 
     id_, customer_id, status_kind, delivered_at, order_date, total = order_row
     items = [

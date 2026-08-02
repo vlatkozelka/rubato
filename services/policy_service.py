@@ -1,7 +1,7 @@
 import logging
 
 import instructor
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from app.timing import log_duration
@@ -12,13 +12,13 @@ from services.retrieval_service import retrieve_chunks
 logger = logging.getLogger("rubato.services.policy_qa")
 
 client = instructor.from_openai(
-    OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
+    AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
     mode=instructor.Mode.JSON_SCHEMA,
 )
 
 
-def _create_excerpts(query: str, top_k: int) -> str:
-    chunks = retrieve_chunks(query, top_k=top_k)
+async def _create_excerpts(query: str, top_k: int) -> str:
+    chunks = await retrieve_chunks(query, top_k=top_k)
 
     excerpts = "\n\n".join(
         f"[{c.source}#{c.text.splitlines()[0].lstrip('# ').strip()}]\n{c.text}"
@@ -28,8 +28,8 @@ def _create_excerpts(query: str, top_k: int) -> str:
     return excerpts
 
 
-def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
-    excerpts = _create_excerpts(question, top_k)
+async def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
+    excerpts = await _create_excerpts(question, top_k)
 
     prompt = """
     You are a policy assistant for an e-commerce store. Answer the customer's
@@ -68,7 +68,7 @@ def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
     """
 
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="answer_policy_question"):
-        return client.chat.completions.create(
+        return await client.chat.completions.create(
             model=LLM_MODEL,
             response_model=PolicyAnswer,
             max_retries=3,
@@ -80,9 +80,9 @@ def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
         )
 
 
-def get_refund_policy(category: str) -> RefundPolicy:
+async def get_refund_policy(category: str) -> RefundPolicy:
     question = f"return refund request for {category} items"
-    excerpts = _create_excerpts(question, 3)
+    excerpts = await _create_excerpts(question, 3)
 
     prompt = f"""
     You are a policy lookup assistant for an e-commerce support system.
@@ -109,7 +109,7 @@ Rules:
 Category: {category}
 """
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="get_refund_policy"):
-        return client.chat.completions.create(
+        return await client.chat.completions.create(
             model=LLM_MODEL,
             response_model=RefundPolicy,
             max_retries=3,

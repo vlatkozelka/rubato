@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from langgraph.constants import END
@@ -97,11 +98,7 @@ graph.add_conditional_edges(NodeId.HANDLE_COMPOSITE, traverse, path_map)
 app_graph = graph.compile()
 
 
-if __name__ == "__main__":
-    from app.logging_setup import configure_logging
-
-    configure_logging()
-
+async def _main() -> None:
     messages = [
         "Can I return software products?",
         "What are the prices of jackets?"
@@ -110,8 +107,16 @@ if __name__ == "__main__":
     i = 0
 
     for message in messages:
-        result = app_graph.invoke(ConversationState(
+        result = await app_graph.ainvoke(ConversationState(
             id=f"test-{i}",
             message=message,
         ))
         i = i + 1
+
+
+if __name__ == "__main__":
+    from app.logging_setup import configure_logging
+
+    configure_logging()
+
+    asyncio.run(_main())

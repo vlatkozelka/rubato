@@ -20,8 +20,8 @@ from services.triage_service import triage_message
 logger = logging.getLogger("rubato.nodes")
 
 
-def triage_node(state: ConversationState) -> ConversationState:
-    result = triage_message(state.message)
+async def triage_node(state: ConversationState) -> ConversationState:
+    result = await triage_message(state.message)
     state.triage_result = result
     return state
 
@@ -38,7 +38,7 @@ def format_order_status(order: Order) -> str:
             return f"Your order {order.id} was cancelled."
 
 
-def check_order_status_node(state: ConversationState) -> ConversationState:
+async def check_order_status_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing check order status on a conversation state with triage_result None")
@@ -46,7 +46,7 @@ def check_order_status_node(state: ConversationState) -> ConversationState:
         order_id = triage_result.order_id
         if order_id is not None:
             with log_duration(logger, "order_lookup_finished", order_id=order_id):
-                order = get_order_by_id(order_id)
+                order = await get_order_by_id(order_id)
             if order is None:
                 logger.warning("order_not_found", extra={"event": "order_not_found", "order_id": order_id})
                 state.results.append(
@@ -73,7 +73,7 @@ def format_price_matches(products: List[Product]) -> str:
     return "Here's what I found:\n" + "\n".join(lines)
 
 
-def check_price_node(state: ConversationState) -> ConversationState:
+async def check_price_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing check_price on a conversation state with triage_result None")
@@ -81,7 +81,7 @@ def check_price_node(state: ConversationState) -> ConversationState:
         product_ref = triage_result.product_reference
         if product_ref is not None:
             with log_duration(logger, "product_lookup_finished", query=product_ref):
-                products = get_products_by_name(product_ref)
+                products = await get_products_by_name(product_ref)
             if not products:
                 logger.warning("product_not_found", extra={"event": "product_not_found", "query": product_ref})
                 state.results.append(
@@ -98,12 +98,12 @@ def check_price_node(state: ConversationState) -> ConversationState:
             return state
 
 
-def answer_policy_question_node(state: ConversationState) -> ConversationState:
+async def answer_policy_question_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing check_price on a conversation state with triage_result None")
     else:
-        result = answer_policy_question(question=state.message, top_k=2)
+        result = await answer_policy_question(question=state.message, top_k=2)
         state.results.append(IntentResult(
             intent=Intent.POLICY_QUESTION,
             result=result.answer,
@@ -112,19 +112,19 @@ def answer_policy_question_node(state: ConversationState) -> ConversationState:
         return state
 
 
-def refund_request_node(state: ConversationState) -> ConversationState:
+async def refund_request_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing refund_request_node on a conversation state with triage_result None")
 
     order_id = triage_result.order_id
-    order = get_order_by_id(order_id) if order_id else None
+    order = await get_order_by_id(order_id) if order_id else None
 
     approval = None
     if order is not None and order.items and state.customer_id is not None:
         product_id = order.items[0].product_id
         with log_duration(logger, "refund_check_finished", order_id=order_id):
-            approval = check_refund(order_id, product_id, state.customer_id, state.message)
+            approval = await check_refund(order_id, product_id, state.customer_id, state.message)
 
     if approval is None:
         logger.warning("refund_request_rejected", extra={"event": "refund_request_rejected", "order_id": order_id})
@@ -132,7 +132,7 @@ def refund_request_node(state: ConversationState) -> ConversationState:
             IntentResult(intent=Intent.REFUND_REQUEST, result="I couldn't process a refund for that order."))
         return state
 
-    approval = create_approval(approval)
+    approval = await create_approval(approval)
     if approval.status == ApprovalStatus.DENIED:
         message = f"I'm sorry, I can't approve this refund: {approval.payload.reason}"
     else:
@@ -141,19 +141,19 @@ def refund_request_node(state: ConversationState) -> ConversationState:
     return state
 
 
-def return_request_node(state: ConversationState) -> ConversationState:
+async def return_request_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing return_request_node on a conversation state with triage_result None")
 
     order_id = triage_result.order_id
-    order = get_order_by_id(order_id) if order_id else None
+    order = await get_order_by_id(order_id) if order_id else None
 
     item = None
     if order is not None and order.items and state.customer_id is not None:
         product_id = order.items[0].product_id
         with log_duration(logger, "return_initiation_finished", order_id=order_id):
-            item = initiate_return(order_id, product_id, state.customer_id, state.message)
+            item = await initiate_return(order_id, product_id, state.customer_id, state.message)
 
     if item is None:
         logger.warning("return_request_rejected", extra={"event": "return_request_rejected", "order_id": order_id})
@@ -166,7 +166,7 @@ def return_request_node(state: ConversationState) -> ConversationState:
     return state
 
 
-def greet_node(state: ConversationState) -> ConversationState:
+async def greet_node(state: ConversationState) -> ConversationState:
     greeting_message = f"""
 Hi! I'm here to help with your orders and questions about our store. I can:
 
@@ -180,7 +180,7 @@ Just let me know what you need!"""
     return state
 
 
-def composite_node(state: ConversationState) -> ConversationState:
+async def composite_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing composite_node on a conversation state with triage_result None")

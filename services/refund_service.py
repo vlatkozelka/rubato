@@ -13,11 +13,11 @@ from services.product_service import get_product_by_id
 logger = logging.getLogger("rubato.services.refund_service")
 
 
-def check_refund(order_id: str, product_id: str, customer_id: str, reason: str) -> Optional[Approval]:
+async def check_refund(order_id: str, product_id: str, customer_id: str, reason: str) -> Optional[Approval]:
     logger.log(level=logging.INFO, msg=f"checkRefund called: order_id = {order_id}, customer_id = {customer_id} ")
     now_string = datetime.now().isoformat()
     order: Optional[Order]
-    order = get_order_by_id(order_id)
+    order = await get_order_by_id(order_id)
     if order is not None and order.customer_id == customer_id:
         # check order status
         if not isinstance(order.status, DeliveredStatus):
@@ -35,14 +35,14 @@ def check_refund(order_id: str, product_id: str, customer_id: str, reason: str) 
             )
         for item in order.items:
             if item.product_id == product_id:
-                product = get_product_by_id(product_id)
+                product = await get_product_by_id(product_id)
                 if product is not None:
                     # check the policy
                     category = product.category
                     delivered_at = datetime.fromisoformat(order.status.delivered_at)
                     elapsed = datetime.now() - delivered_at
                     days_since_delivery = elapsed.days
-                    refund_policy = get_refund_policy(category)
+                    refund_policy = await get_refund_policy(category)
                     if refund_policy.allowed_duration > days_since_delivery:
                         return Approval(
                             id=uuid.uuid4(),
@@ -76,5 +76,7 @@ def check_refund(order_id: str, product_id: str, customer_id: str, reason: str) 
 
 
 if __name__ == "__main__":
-    result = check_refund("ord_1001", "prod_004", "cust_001", "broken")
+    import asyncio
+
+    result = asyncio.run(check_refund("ord_1001", "prod_004", "cust_001", "broken"))
     print(result)

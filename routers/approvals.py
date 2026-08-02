@@ -17,25 +17,25 @@ class DenyRequest(BaseModel):
 
 
 @router.get("", response_model=List[Approval])
-def get_approvals(_: AuthPrincipal = Depends(require_staff)) -> List[Approval]:
-    return list_pending()
+async def get_approvals(_: AuthPrincipal = Depends(require_staff)) -> List[Approval]:
+    return await list_pending()
 
 
 @router.post("/{approval_id}/approve", response_model=Approval)
-def approve_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) -> Approval:
-    approval = approve(approval_id)
+async def approve_approval(approval_id: UUID, _: AuthPrincipal = Depends(require_staff)) -> Approval:
+    approval = await approve(approval_id)
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found or not pending")
     return approval
 
 
 @router.post("/{approval_id}/deny", response_model=Approval)
-def deny_approval(
+async def deny_approval(
     approval_id: UUID,
     payload: DenyRequest,
     _: AuthPrincipal = Depends(require_staff),
 ) -> Approval:
-    approval = deny(approval_id, payload.reason)
+    approval = await deny(approval_id, payload.reason)
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found or not pending")
     return approval

@@ -20,12 +20,12 @@ class ProductUpdate(BaseModel):
 
 
 @router.get("", response_model=List[Product])
-def get_products(_: AuthPrincipal = Depends(require_staff)) -> List[Product]:
-    return list_products()
+async def get_products(_: AuthPrincipal = Depends(require_staff)) -> List[Product]:
+    return await list_products()
 
 
 @router.patch("/{product_id}", response_model=Product)
-def patch_product(
+async def patch_product(
     product_id: str,
     payload: ProductUpdate,
     _: AuthPrincipal = Depends(require_staff),
@@ -33,7 +33,7 @@ def patch_product(
     fields = payload.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
-    product = update_product(product_id, fields)
+    product = await update_product(product_id, fields)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return product

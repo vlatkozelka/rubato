@@ -1,13 +1,13 @@
 import logging
 import time
-from typing import Callable
+from typing import Awaitable, Callable
 
 from app.timing import elapsed_ms
 from models.conversation_state import ConversationState
 
 logger = logging.getLogger("rubato.graph.nodes")
 
-NodeFn = Callable[[ConversationState], ConversationState]
+NodeFn = Callable[[ConversationState], Awaitable[ConversationState]]
 
 
 def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
@@ -18,7 +18,7 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
     new nodes get this instrumentation for free by wrapping them the same way.
     """
 
-    def wrapper(state: ConversationState) -> ConversationState:
+    async def wrapper(state: ConversationState) -> ConversationState:
         logger.info("node_started", extra={"event": "node_started", "node_name": node_name})
 
         results_before = len(state.results)
@@ -26,7 +26,7 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
         start = time.perf_counter()
 
         try:
-            new_state = node_fn(state)
+            new_state = await node_fn(state)
         except Exception:
             logger.error(
                 "node_finished",
