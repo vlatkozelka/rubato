@@ -545,6 +545,26 @@ match.
 
 **Async boundary: converted only what MCP calls touch.** `check_price_node` and its MCP-calling path went `async def`; nodes with no MCP/network dependency (e.g. `triage_node`) stayed sync deliberately — converting them would be a real, separate piece of work (a genuine async migration across LLM-calling nodes) mistakenly folded into a transport-boundary phase. Logged as a candidate for Phase 13, not done here.
 
+---
+
+
+## Phase 8 — Conversation history format for triage
+
+History is passed to the LLM as structured multi-turn messages (prior
+`Turn`s appended into the `messages` list before the current message),
+not flattened into a single string. This uses the chat endpoint's native
+multi-turn format directly, so `instructor` needs no custom parsing.
+
+The system prompt was extended to explicitly tell the model that a short
+reply (an order ID, a bare "yes") may be answering a question the
+assistant itself just asked, and to classify the current message in that
+light. Without this, "ord_1011" alone triage'd as order_status; with
+history + the instruction, it correctly resolved as a refund_request
+continuation, including running eligibility and correctly denying it on
+the return window.
+
+
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency

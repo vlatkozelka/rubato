@@ -24,7 +24,10 @@ async def _get_order(order_id: str) -> Optional[Order]:
 
 
 async def triage_node(state: ConversationState) -> ConversationState:
-    result = await call_tool("triage_message_tool", {"message": state.message})
+    result = await call_tool("triage_message_tool", {
+        "message": state.message,
+        "history": [t.model_dump(mode="json") for t in state.history],
+    })
     state.triage_result = TriageResult.model_validate(result.structuredContent)
     return state
 
@@ -123,7 +126,13 @@ async def refund_request_node(state: ConversationState) -> ConversationState:
         raise ValueError("performing refund_request_node on a conversation state with triage_result None")
 
     order_id = triage_result.order_id
-    order = await _get_order(order_id) if order_id else None
+    if order_id is None:
+        state.results.append(
+            IntentResult(intent=Intent.REFUND_REQUEST, result="Sure, which order would you like refunded?")
+        )
+        return state
+
+    order = await _get_order(order_id)
 
     approval = None
     if order is not None and order.items and state.customer_id is not None:

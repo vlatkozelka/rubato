@@ -63,6 +63,16 @@ you detected in sub_intents. Leave sub_intents empty when only one intent
 is present, including for chitchat, escalate, and single-cause
 complex_case (e.g. a case needing lookup but with no second intent stated).
 
+Conversation history, if present, appears as prior turns before the current
+message. Use it to resolve what the current message means — a short reply
+like an order ID, a "yes", or a bare number is often an answer to a question
+YOU (the assistant) just asked, not a new unrelated request. Classify the
+CURRENT message's intent in light of that context. For example, if your
+last turn asked "which order would you like refunded?" and the current
+message is just an order number, classify it as refund_request, using the
+order ID from the current message, informed by what was being resolved in
+the prior turn.
+
 Examples:
 
 1. "How many days do I have to return something if I changed my mind?"
@@ -90,13 +100,27 @@ Examples:
    -> composite, sub_intents=[price_check, return_request]
    (independent asks — a cost lookup and a return request, no conflict)
    
+8. History: [user: "I want a refund", assistant: "Sure, which order would you like refunded?"]
+   Current message: "ord_001"
+   -> refund_request, order_id="ord_001"
+   (a bare order number alone would normally look like order_status, but
+   given the prior turn was the assistant asking which order to refund,
+   this is a continuation of that refund flow)   
+   
 Always extract order_id and product_reference if present. Set sentiment from
 the customer's actual tone (neutral, frustrated, angry) — never let intent
 classification influence the sentiment field.
 """.strip()
 
 
-async def triage_message(message: str) -> TriageResult:
+from models.turn import Turn
+
+async def triage_message(message: str, history: list[Turn] | None = None) -> TriageResult:
+    history_messages = [
+        {"role": "user" if t.role == "user" else "assistant", "content": t.content}
+        for t in (history or [])
+    ]
+
     with log_duration(logger, "llm_call_finished", service="triage_service", function="triage_message"):
         return await client.chat.completions.create(
             model=LLM_MODEL,
@@ -104,6 +128,7 @@ async def triage_message(message: str) -> TriageResult:
             max_retries=3,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
+                *history_messages,
                 {"role": "user", "content": message},
             ],
         )
