@@ -2,6 +2,7 @@ import logging
 from typing import List
 
 from app.timing import log_duration
+from mcp_client.client import call_tool
 from models.approval import ApprovalStatus
 from models.conversation_state import ConversationState
 from models.intent import Intent
@@ -77,25 +78,26 @@ async def check_price_node(state: ConversationState) -> ConversationState:
     triage_result = state.triage_result
     if triage_result is None:
         raise ValueError("performing check_price on a conversation state with triage_result None")
-    else:
-        product_ref = triage_result.product_reference
-        if product_ref is not None:
-            with log_duration(logger, "product_lookup_finished", query=product_ref):
-                products = await get_products_by_name(product_ref)
-            if not products:
-                logger.warning("product_not_found", extra={"event": "product_not_found", "query": product_ref})
-                state.results.append(
-                    IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
-                return state
-            else:
-                message = format_price_matches(products)
-                state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result=message))
-                return state
-        else:
-            logger.info("product_reference_missing", extra={"event": "product_reference_missing"})
-            state.results.append(
-                IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
-            return state
+
+    product_ref = triage_result.product_reference
+    if product_ref is None:
+        logger.info("product_reference_missing", extra={"event": "product_reference_missing"})
+        state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
+        return state
+
+    with log_duration(logger, "product_lookup_finished", query=product_ref):
+        result = await call_tool("get_products_by_name_tool", {"name": product_ref, "limit": 20})
+
+    products = [Product.model_validate(p) for p in result.structuredContent["result"]]
+
+    if not products:
+        logger.warning("product_not_found", extra={"event": "product_not_found", "query": product_ref})
+        state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result="I couldn't find the product you're asking for."))
+        return state
+
+    message = format_price_matches(products)
+    state.results.append(IntentResult(intent=Intent.PRICE_CHECK, result=message))
+    return state
 
 
 async def answer_policy_question_node(state: ConversationState) -> ConversationState:
