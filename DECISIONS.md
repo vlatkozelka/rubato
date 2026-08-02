@@ -527,6 +527,24 @@ policy correctly retrieved a 14-day window, correctly denied. Confirms the
 window is genuinely coming from the document, not a coincidental hardcoded
 match.
 
+## Phase 7 — MCP
+
+**Why MCP at all.** Tools were already plain service functions callable by direct import — MCP adds no functional capability today, only a transport boundary. The cost (latency per call, added process, added complexity) is paid now for a real payoff later: Phase 9's agent loop needs tools addressable by name/schema independent of Python import paths, and MCP tools are trivially reusable by other clients/machines (a different LLM backend, a future service) without code changes. Net: a deliberate cost taken early for reuse and decoupling, not a functional requirement of Phase 7 itself.
+
+**HTTP over stdio.** stdio ties the tool server to the same machine/process tree as its caller. HTTP keeps the MCP server genuinely swappable to another machine with just a URL change — matches the standing rationale that tools should be reachable from other processes later (a different LLM backend, a separate agent host), not just this one local graph.
+
+**Auth: static shared key, not JWT.** Originally planned as JWT (signature, expiry, claims). Reconsidered once the actual trust boundary was clear: this is two processes on one machine, owned by the same system, never crossing a real network trust boundary — JWT's machinery (expiry handling, signature verification, claims) solves a multi-party/multi-machine identity problem that doesn't exist here. Landed on a static shared key compared with `secrets.compare_digest` (constant-time, avoids timing-attack leakage) instead of `==`. Upgrade path if this ever needs real multi-client or cross-machine identity: JWT or full OAuth.
+
+**Separate auth layer from the app's existing JWT.** `app/auth.py` authenticates end users (customers/staff) through the public API surface. `mcp_server/auth.py` authenticates the graph process to the MCP process — a different trust boundary entirely, so no code reuse was forced between them.
+
+**`session.call_tool()` over `get_tools()`/agent-style `Tool` wrapping.** `langchain-mcp-adapters` offers two calling patterns: `get_tools()` converts MCP tools into LangChain `Tool` objects for an LLM to choose between (the agent pattern — Phase 9's use case), versus `client.session(...)` + `session.call_tool(name, args)`, calling a named tool directly with known arguments. Phase 7's nodes already know exactly which tool they need — routing decided that upstream in triage — so there's no tool-selection happening here. Using `get_tools()` would add agent-oriented machinery for a call site that isn't an agent. `session.call_tool()` matches the phase's actual intent: same control flow, just crossing a protocol boundary.
+
+**Stateless client, no persistent session.** Considered hand-rolling a persistent MCP session with reconnect-on-failure logic (background thread, dedicated event loop) to avoid paying connection setup cost per call. Dropped in favor of `MultiServerMCPClient`'s default stateless behavior — a fresh session per call — because the MCP server holds no cross-call state, so there's nothing a persistent session buys here beyond avoided setup latency, and "reconnect after a drop" isn't a problem when every call already opens fresh. Revisit only if per-call connection overhead is measured as an actual bottleneck (Phase 13 territory, not assumed now).
+
+**`structuredContent["result"]` unwrapping for list-returning tools.** FastMCP wraps non-object return types (e.g. `list[Product]`) under a `"result"` key in `structuredContent` — confirmed by direct inspection, not documented obviously. Every tool converted from a list-returning service function needs this unwrapping; noted here so it's not independently rediscovered (or inconsistently guessed at) per tool, including by whatever hands off the remaining tool conversions.
+
+**Async boundary: converted only what MCP calls touch.** `check_price_node` and its MCP-calling path went `async def`; nodes with no MCP/network dependency (e.g. `triage_node`) stayed sync deliberately — converting them would be a real, separate piece of work (a genuine async migration across LLM-calling nodes) mistakenly folded into a transport-boundary phase. Logged as a candidate for Phase 13, not done here.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
