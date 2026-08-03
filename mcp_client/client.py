@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -26,3 +25,6 @@ async def call_tool(tool_name: str, arguments: dict):
     """
     async with client.session(MCP_SERVER_NAME) as session:
         return await session.call_tool(tool_name, arguments)
+
+async def get_langchain_tools():
+    return await client.get_tools()

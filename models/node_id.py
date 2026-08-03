@@ -10,5 +10,4 @@ class NodeId(str, Enum):
     CHECK_PRICE = "check_price"
     ASSIGN_TO_HUMAN = "assign_to_human"
     GREET = "greet"
-    HANDLE_COMPOSITE = "handle_composite"
     PROCESS_COMPLEX_CASE = "process_complex_case"

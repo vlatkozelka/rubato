@@ -14,15 +14,13 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
     """Wrap a node function with entry/exit/timing/error logging.
 
     Applied when nodes are registered on the StateGraph, so node functions
-    in graph/nodes.py stay free of logging concerns. Reused for every node —
+    in graph/simple_nodes.py stay free of logging concerns. Reused for every node —
     new nodes get this instrumentation for free by wrapping them the same way.
     """
 
     async def wrapper(state: ConversationState) -> ConversationState:
         logger.info("node_started", extra={"event": "node_started", "node_name": node_name})
 
-        results_before = len(state.results)
-        triage_before = state.triage_result.model_dump(mode="json") if state.triage_result else None
         start = time.perf_counter()
 
         try:
@@ -40,7 +38,6 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
             )
             raise
 
-        triage_after = new_state.triage_result.model_dump(mode="json") if new_state.triage_result else None
         logger.info(
             "node_finished",
             extra={
@@ -48,8 +45,9 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
                 "node_name": node_name,
                 "duration_ms": elapsed_ms(start),
                 "status": "ok",
-                "results_produced": [r.model_dump(mode="json") for r in new_state.results[results_before:]],
-                "triage_result": triage_after if triage_after != triage_before else None,
+                "reply": new_state.reply,
+                "citations": new_state.citations,
+                "triage_result": new_state.triage_result.model_dump(mode="json") if new_state.triage_result else None,
             },
         )
         return new_state
