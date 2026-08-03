@@ -61,7 +61,7 @@ async def save_conversation_turn(
     await conn.close()
 
 
-HISTORY_TOKEN_BUDGET = 100  # rough char/4 estimate, not exact tokenization
+HISTORY_TOKEN_BUDGET = 3000  # rough char/4 estimate, not exact tokenization
 KEEP_VERBATIM_TURNS = 6
 
 plain_client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
