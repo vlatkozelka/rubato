@@ -9,5 +9,4 @@ class Intent(str, Enum):
     PRICE_CHECK = "price_check"
     ESCALATE = "escalate"
     CHITCHAT = "chitchat"
-    COMPOSITE = "composite"
     COMPLEX_CASE = "complex_case"

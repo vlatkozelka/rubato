@@ -212,20 +212,3 @@ Hi! I'm here to help with your orders and questions about our store. I can:
 Just let me know what you need!"""
     state.results.append(IntentResult(intent=Intent.CHITCHAT, result=greeting_message))
     return state
-
-
-async def composite_node(state: ConversationState) -> ConversationState:
-    triage_result = state.triage_result
-    if triage_result is None:
-        raise ValueError("performing composite_node on a conversation state with triage_result None")
-    else:
-        sub_intents = triage_result.sub_intents
-        if not sub_intents:
-            raise ValueError("performing composite_node on a conversation state with no sub intents")
-        else:
-            # todo add memory to handle other intents
-            first_sub_intent = sub_intents[0]
-            state.results.append(IntentResult(intent=Intent.COMPOSITE,
-                                              result=f"I will help you resolve {first_sub_intent.value.replace('_', ' ')} first and then we'll handle the rest"))
-            state.triage_result.intent = first_sub_intent
-        return state
