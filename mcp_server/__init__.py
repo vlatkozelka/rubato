@@ -14,3 +14,4 @@ from mcp_server.tools import policy  # noqa: F401
 from mcp_server.tools import refunds  # noqa: F401
 from mcp_server.tools import returns  # noqa: F401
 from mcp_server.tools import approvals  # noqa: F401
+from mcp_server.tools import return_history  # noqa: F401

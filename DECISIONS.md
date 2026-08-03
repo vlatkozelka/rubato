@@ -613,6 +613,42 @@ vs. computed on-demand at the point of actual use has no answer without
 a real consumer — deferred to whichever phase first reads it.
 
 
+## Phase 7 (gap) — return_history had no service layer or MCP tool
+
+**What was missed.** `return_history` (schema + seed data, added in the
+Postgres migration detour) was never given a service module or an MCP tool
+during Phase 7's tool conversion — every other read-only domain object
+(orders, products, stock, refund eligibility, policy docs) was converted,
+this one wasn't. Not caught until Phase 9 needed it for the return-history
+abuse check called out in the Phase 8 customer_profiles entry above.
+
+**Fix, added now as a Phase 9 prerequisite, not part of Phase 9 itself:**
+`services/return_history_service.py` (`get_return_history(customer_id)`,
+same per-call-connect `psycopg.AsyncConnection` pattern as `order_service`/
+`product_service`, most-recent-first) and `mcp_server/tools/return_history.py`
+(`get_return_history_tool`, registered in `mcp_server/__init__.py` same as
+every other tool module). List-returning, so it needs the same
+`structuredContent["result"]` unwrapping documented in the Phase 7 MCP
+section above — verified directly (not assumed) against the real server:
+without the unwrap, `structuredContent` came back `None` and the rows were
+only reachable by parsing each `content[i].text` as JSON.
+
+**Read-only, deliberately.** Only a lookup method was added — no insert/
+write path — since none was scoped for this task. `initiate_return`
+(`services/return_service.py`) already covers starting a new return; whether
+that should also append to `return_history` is a separate decision, not
+addressed here.
+
+**Not wired into any graph node.** This only makes the tool callable
+(verified with a direct MCP client call against seeded data, customer
+`cust_006` → 2 rows, most recent first). Wiring it into the `complex_case`
+loop is Phase 9's actual next step.
+
+**Verified:** `mcp_client.call_tool("get_return_history_tool", {"customer_id":
+"cust_006"})` against the seeded DB returned both `cust_006` rows
+(`ord_1018`, `ord_1012`), most-recent-first; a customer with no returns
+(`cust_001`) correctly returned `[]`.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
