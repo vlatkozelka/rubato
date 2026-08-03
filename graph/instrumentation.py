@@ -14,7 +14,7 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
     """Wrap a node function with entry/exit/timing/error logging.
 
     Applied when nodes are registered on the StateGraph, so node functions
-    in graph/nodes.py stay free of logging concerns. Reused for every node —
+    in graph/simple_nodes.py stay free of logging concerns. Reused for every node —
     new nodes get this instrumentation for free by wrapping them the same way.
     """
 

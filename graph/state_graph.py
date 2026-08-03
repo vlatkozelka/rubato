@@ -5,7 +5,7 @@ from langgraph.constants import END
 from langgraph.graph import StateGraph
 
 from graph.instrumentation import instrumented_node
-from graph.nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node, greet_node, \
+from graph.nodes.simple_nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node, greet_node, \
     composite_node, refund_request_node, return_request_node
 from models.conversation_state import ConversationState
 from models.intent import Intent
