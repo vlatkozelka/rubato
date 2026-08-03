@@ -649,6 +649,71 @@ loop is Phase 9's actual next step.
 (`ord_1018`, `ord_1012`), most-recent-first; a customer with no returns
 (`cust_001`) correctly returned `[]`.
 
+## Phase 9 (prep) — Dropped `composite`, collapsed `results` into `reply`
+
+**Decision:** Removed the `composite` intent, `sub_intents`, `composite_node`,
+and the `ConflictingIntentPair`/conflict-pair machinery entirely. Collapsed
+`ConversationState.results: List[IntentResult]` into a single
+`reply: Optional[str]` + `citations: Optional[List[str]]`. This is a
+deliberate reversal of the Phase 2 experiment (see "Composite vs.
+complex_case" and "Composite/conflict design, kept as an experiment" above),
+not an oversight — that entry already flagged this as revisitable once real
+usage data existed; what actually triggered the reversal is different from
+what that entry anticipated (see below).
+
+**Why composite was dropped.** It existed to let triage chain independent
+simple intents deterministically (`sub_intents`, run each in turn). The
+Phase 9 agent loop makes this redundant: an agent that can plan and call
+tools freely handles a multi-intent message natively, without a separate
+mechanism for detecting and chaining independent sub-intents. With
+`composite` gone, `complex_case` now covers both cases it always partially
+owned — genuinely unknowable resolutions AND multi-intent messages,
+independent or conflicting alike — since every multi-intent message now
+needs the same thing: a node that can reason over more than one ask, which
+is exactly the agent loop.
+
+**Why `results` became `reply`.** With `composite` gone, every request runs
+exactly one terminal node. `results: List[IntentResult]` existed to
+accumulate output across chained sub-intent nodes; with nothing left to
+chain, it always held exactly zero or one entries. Collapsed to a single
+`reply` + `citations`, read directly off `ConversationState` instead of
+filtered/joined from a list. The intent is already available on
+`triage_result`, so `IntentResult`'s intent→result mapping had nothing left
+to provide either — deleted.
+
+**Why the conflicting-intent-pair machinery went with it.** It only ever
+performed conflict *detection* for routing purposes — telling triage "these
+two intents together mean `complex_case`, not `composite`." It never
+performed conflict *resolution*. With `composite` gone, every multi-intent
+message routes to `complex_case` regardless of whether the intents conflict,
+so the detection distinction has nothing left to disambiguate.
+
+**The conflict rule itself, recorded here so it isn't lost with the class:**
+refund (money back) and return-for-exchange are mutually exclusive remedies
+for the same item — the customer must end up with one outcome, not both.
+This moves into the complex-case agent's system prompt when that node is
+built (Phase 9 proper). Resolution policy: when two requested outcomes are
+mutually exclusive and no retrieved fact settles which applies, the agent
+must NOT choose — it states the options and asks the customer which they'd
+prefer. Rationale: refund vs. exchange is a customer preference, not a
+discoverable fact; no tool call can resolve it, guessing "first stated"
+treats word order as intent priority, and guessing "cheaper remedy" resolves
+ambiguity in the business's favor against a stated preference. Phase 8's
+history-aware triage makes the follow-up answer resolve as a continuation
+(see the refund-order-ID example in `triage_service.SYSTEM_PROMPT`). Planned
+code-level invariant, not yet implemented: the complex-case node must reject
+an actions list containing both a refund and a return for the same
+`order_id`, rather than relying on the prompt alone.
+
+**Verified:** all six simple intents (`order_status`, `price_check`,
+`policy_question`, `return_request`, `refund_request`, `chitchat`) round-
+tripped through `POST /support/message` unchanged, `policy_question` still
+returned citations, and a previously-composite message ("Where's my order,
+and what's your return policy if it arrives broken?") classified as
+`complex_case` and routed to `END` cleanly (no crash) — expected, since the
+complex-case node doesn't exist yet.
+
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency

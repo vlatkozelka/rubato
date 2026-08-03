@@ -136,23 +136,14 @@ def staff_login(payload: LoginRequest) -> LoginResponse:
 
 
 def _build_support_response(conversation_id: str, result_state: ConversationState) -> SupportMessageResponse:
-    # Maps internal ConversationState.results onto the API's chat shape — see DECISIONS.md.
-    non_empty = [r for r in result_state.results if r.result]
-    if not non_empty:
-        reply = "Sorry, I wasn't able to process that."
-        intent = None
-        citations = None
-    else:
-        reply = "\n\n".join(r.result for r in non_empty)
-        final = non_empty[-1]
-        intent = final.intent
-        citations = final.citations
+    reply = result_state.reply or "Sorry, I wasn't able to process that."
+    intent = result_state.triage_result.intent if result_state.triage_result else None
 
     return SupportMessageResponse(
         conversation_id=conversation_id,
         reply=reply,
         intent=intent,
-        citations=citations,
+        citations=result_state.citations,
         trace_id=str(uuid4()),
         responded_at=datetime.now(timezone.utc).isoformat(),
     )
