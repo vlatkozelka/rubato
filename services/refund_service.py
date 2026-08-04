@@ -29,6 +29,7 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
                     reason="Order not yet delivered"
                 ),
                 status=ApprovalStatus.DENIED,
+                customer_id=customer_id,
                 created_at=now_string,
                 updated_at=now_string,
                 type=ApprovalType.REFUND_REQUEST
@@ -52,6 +53,7 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
                                 reason=f"Order was delivered since {days_since_delivery} days from this request which is less than {refund_policy.allowed_duration} days as mentioned for the refund policy for items of category: {category} "
                             ),
                             status=ApprovalStatus.PENDING_REVIEW,
+                            customer_id=customer_id,
                             created_at=now_string,
                             updated_at=now_string,
                             type=ApprovalType.REFUND_REQUEST
@@ -65,6 +67,7 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
                                 reason=f"Order was delivered since {days_since_delivery} days from this request which is more than {refund_policy.allowed_duration} days as mentioned for the refund policy for items of category: {category} "
                             ),
                             status=ApprovalStatus.DENIED,
+                            customer_id=customer_id,
                             created_at=now_string,
                             updated_at=now_string,
                             type=ApprovalType.REFUND_REQUEST
