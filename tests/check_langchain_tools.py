@@ -23,6 +23,8 @@ async def main():
     )
 
     tools = await client.get_tools()
+    print("=== Tool names ===")
+    print(", ".join(t.name for t in tools))
     target_tool = next(t for t in tools if t.name == "get_return_history_tool")
 
     result = await target_tool.ainvoke({"customer_id": "cust_006"})
