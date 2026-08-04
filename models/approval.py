@@ -27,5 +27,6 @@ class Approval(BaseModel):
     type: ApprovalType
     payload: ApprovalPayload
     status: ApprovalStatus
+    customer_id: str
     created_at: str
     updated_at: str

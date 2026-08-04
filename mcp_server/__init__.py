@@ -15,3 +15,8 @@ from mcp_server.tools import refunds  # noqa: F401
 from mcp_server.tools import returns  # noqa: F401
 from mcp_server.tools import approvals  # noqa: F401
 from mcp_server.tools import return_history  # noqa: F401
+from mcp_server.tools import orders_by_customer  # noqa: F401
+from mcp_server.tools import orders_by_ids  # noqa: F401
+from mcp_server.tools import product_by_id  # noqa: F401
+from mcp_server.tools import customer_profile  # noqa: F401
+from mcp_server.tools import approval_status  # noqa: F401
