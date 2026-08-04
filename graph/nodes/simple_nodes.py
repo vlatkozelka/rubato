@@ -142,12 +142,19 @@ async def refund_request_node(state: ConversationState) -> ConversationState:
         state.reply = "I couldn't process a refund for that order."
         return state
 
-    create_result = await call_tool("create_approval_tool", {"approval": approval.model_dump(mode="json")})
+    create_result = await call_tool("create_approval_tool", {
+        "order_id": approval.payload.order_id,
+        "reason": approval.payload.reason,
+        "amount": approval.payload.amount,
+        "type": approval.payload.type.value,
+        "status": approval.payload.status.value,
+        "customer_id": approval.payload.customer_id,
+    })
 
     approval = Approval.model_validate(create_result.structuredContent)
     await increment_refund_request_count(state.customer_id)
 
-    if approval.status == ApprovalStatus.DENIED:
+    if approval.payload.status == ApprovalStatus.DENIED:
         state.reply = f"I'm sorry, I can't approve this refund: {approval.payload.reason}"
     else:
         state.reply = "Your refund request has been submitted and is pending review by our team."

@@ -39,8 +39,7 @@ function renderApproval(approval) {
   info.className = "approval-info";
   info.innerHTML = `
     <div><strong>Order:</strong> ${approval.payload.order_id}</div>
-    <div><strong>Customer reason:</strong> ${approval.reason}</div>
-    <div><strong>Eligibility:</strong> ${approval.payload.reason}</div>
+    <div><strong>Reason:</strong> ${approval.payload.reason}</div>
   `;
 
   const actions = document.createElement("div");
