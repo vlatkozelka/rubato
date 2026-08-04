@@ -1,17 +1,26 @@
-from enum import Enum
-from pydantic import BaseModel
+from typing import List
 
-
-class ComplexCaseDecision(str, Enum):
-    EXCHANGE = "exchange"
-    REFUND = "refund"
-    PARTIAL_CREDIT = "partial_credit"
-    DENIAL = "denial"
+from pydantic import BaseModel, Field
 
 
 class ComplexCaseResolution(BaseModel):
-    decision: ComplexCaseDecision
-    order_id: str
-    customer_reason: str   # normalized version of what the customer said, e.g. "broken zipper on arrival"
-    reasoning: str          # agent's internal justification for the decision — supporting detail for the approver
-    customer_message: str   # reply to send back to the customer
+    """Call this tool when you are finished investigating and ready to
+        respond to the customer — including when you need to ask them a
+        clarifying question (e.g. for a missing order ID) rather than a
+        final decision. This is the ONLY way to send a reply back to the
+        customer; do not attempt to communicate with them through any other
+        tool."""
+    customer_message: str = Field(
+        description="The full reply to send back to the customer. Plain, "
+                     "warm, no internal policy mechanics or reasoning."
+    )
+    reasoning: str = Field(
+        description="Internal justification for this resolution, written "
+                     "for a human reviewer — which facts you found (order "
+                     "status, policy, return history, stock) and how they "
+                     "led here. Not shown to the customer."
+    )
+    citations: List[str] = Field(
+        default_factory=list,
+        description="Policy doc sources used, if any policy question was answered.",
+    )

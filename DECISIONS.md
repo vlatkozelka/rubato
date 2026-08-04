@@ -713,6 +713,100 @@ and what's your return policy if it arrives broken?") classified as
 `complex_case` and routed to `END` cleanly (no crash) — expected, since the
 complex-case node doesn't exist yet.
 
+---
+
+## Phase 9 — Complex-case ReAct loop
+
+**Structural choice:** ReAct via `langchain.agents.create_agent` (or
+`langgraph.prebuilt.create_react_agent`, per installed langchain version)
+rather than a hand-rolled while-loop. Rationale: LangGraph/LangChain is a
+de facto standard at this point; hand-rolling the exact thing the
+framework does well teaches less than knowing how to configure and
+reason about it — comparable to choosing Retrofit over a hand-rolled
+HttpURLConnection client. This is a deliberate "framework vs
+hand-rolled" data point (Section 4), distinct from Phase 5's triage,
+which was hand-rolled first before moving into LangGraph.
+
+**Tool loading:** via `langchain_mcp_adapters.client.MultiServerMCPClient
+.get_tools()` against the existing Phase 7 MCP server (same HTTP
+transport, same shared bearer token), not hand-written `@tool` wrappers.
+Rejected hand-writing wrappers because it means two hand-maintained
+descriptions of the same tool (MCP registration + LangChain wrapper)
+that can silently drift. `get_langchain_tools()` lives in
+`mcp_client/client.py` alongside the existing raw `call_tool()` path —
+both coexist, serving different callers (deterministic nodes use
+`call_tool` directly; the agent loop uses the LangChain-wrapped set).
+
+**Tool result unwrapping — confirmed necessary, not automatic.**
+`get_tools()` does not return clean Python objects. List-returning MCP
+tools come back as one MCP content block per list item, each with the
+payload JSON-encoded inside `text`. A shared `unwrap_tool_result` helper
+(`mcp_server/utils/`) handles this consistently. Separately, empty
+results (`[]`) were found to collapse to a blank string when serialized
+into the model's prompt (`Tool:` with nothing after it) — a
+`get_safe_langchain_tools()` wrapper coerces empty tool output to a
+legible `"[]"` string before the model ever sees it.
+
+**Terminal decision mechanism — resolved after significant debugging.**
+Initially used `response_format=ToolStrategy(ComplexCaseResolution)`.
+This forces `tool_choice="required"` on every turn, including the final
+one — which is fundamentally in tension with a thinking-capable model
+(the same collision LangChain's own docs describe for Anthropic:
+"Thinking may not be enabled when tool_choice forces tool use").
+Observed symptom: the model would investigate correctly, reason to the
+right answer, then fail to invoke the terminal tool — instead writing a
+well-formed JSON answer as plain text in `content`, sometimes repeating
+it until hitting the token cap. Confirmed via direct comparison: the
+same message given to the bare model in LM Studio's chat (no forced
+tool_choice) correctly asked a clarifying question in one shot.
+
+**Root cause, ultimately:** the underlying model
+(`qwen3.5-9b-claude-4.6-opus-reasoning-distilled-v2`) has broken
+thinking/content boundary parsing in this configuration — a known,
+reported issue for small Qwen3.5 checkpoints on LM Studio specifically.
+Multiple request-level fixes were attempted and failed to hold
+(`chat_template_kwargs.enable_thinking`, LM Studio's `reasoning: "off"`
+field) — `reasoning_tokens` stayed nonzero across attempts, confirming
+neither flag was reaching the model's chat template.
+
+**Fix applied:** edited the model's Jinja prompt template directly in LM
+Studio (`{% set enable_thinking = false %}`), then reloaded the model.
+This structurally prevents the model from ever entering a thinking
+state, rather than asking the server to suppress it per-request — a
+template-level fix, not a runtime flag, which is why it held where the
+others didn't.
+
+**Also resolved along the way, independent of the thinking issue:**
+- `ComplexCaseResolution`'s Pydantic class needed a docstring — `Field(description=...)` on
+  individual properties does not populate the tool's own top-level
+  description, and a model under `tool_choice="required"` reliably
+  avoided the one tool it had zero information about (i.e. the only way
+  to terminate the loop).
+- System prompt needed explicit statement of a real limitation ("no
+  tool to look up a customer's orders by name/description — only by
+  exact order_id") rather than an abstract "stop if you can't make
+  progress" instruction, which a smaller model did not reliably act on.
+- `recursion_limit=15` on `agent.ainvoke()` — no guard existed
+  previously; a broken loop would run indefinitely.
+- `max_tokens=1024` on the model — caps a single runaway generation
+  (observed hitting `finish_reason: "length"` while repeating the same
+  answer) rather than letting it run unbounded.
+
+**Deferred to Phase 12 (evals):** further system-prompt tuning. Phase 9
+ReAct is considered functionally complete; remaining prompt refinement
+is measurement-driven work that belongs with the eval suite, not
+further ad-hoc iteration now.
+
+**Approval-gate integration — unchanged from earlier decision.** The
+agent calls `create_approval_tool` / `initiate_return_tool` directly,
+mid-loop, as ordinary tools — not a node-side deterministic replay.
+`execute_refund` (the only thing that actually moves money) remains
+unreachable by the agent regardless, so this doesn't weaken the
+approval invariant; it's simply less code than reconstructing the
+approval from the loop's tool-call history after the fact.
+
+---
+
 
 ## Open questions to answer as later phases land
 

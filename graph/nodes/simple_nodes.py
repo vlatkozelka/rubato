@@ -142,10 +142,9 @@ async def refund_request_node(state: ConversationState) -> ConversationState:
         state.reply = "I couldn't process a refund for that order."
         return state
 
-
     create_result = await call_tool("create_approval_tool", {"approval": approval.model_dump(mode="json")})
-    approval = Approval.model_validate(create_result.structuredContent)
 
+    approval = Approval.model_validate(create_result.structuredContent)
     await increment_refund_request_count(state.customer_id)
 
     if approval.status == ApprovalStatus.DENIED:
