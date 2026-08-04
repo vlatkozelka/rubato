@@ -1,11 +1,3 @@
-"""
-Rubato — Phase 1 skeleton.
-
-Scope for this phase, deliberately: one endpoint, one hardcoded response.
-No triage, no RAG, no graph. The point of Phase 1 is proving the scaffolding
-(FastAPI app, Docker, config wiring to LM Studio) works before any real logic
-goes on top of it.
-"""
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -192,3 +184,8 @@ async def support_message(
             )
 
         return response
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+

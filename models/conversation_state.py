@@ -12,7 +12,7 @@ from models.turn import Turn
 class ConversationState(BaseModel):
     id: str
     message: str
-    customer_id: Optional[str] = None
+    customer_id: str
     customer: Optional[Customer] = None
     order: Optional[Order] = None
     triage_result: Optional[TriageResult] = None
