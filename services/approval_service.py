@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
 
@@ -7,7 +6,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.config import POSTGRES_DSN
-from models.approval import Approval, ApprovalPayload, ApprovalStatus, ApprovalType
+from models.approval import Approval, ApprovalPayload, ApprovalStatus
 from services.order_service import get_order_by_id
 from services.refund_execution_service import execute_refund
 
@@ -33,28 +32,8 @@ def _row_to_approval(row) -> Approval:
     )
 
 
-async def create_approval(
-    order_id: str,
-    reason: str,
-    type: ApprovalType,
-    status: ApprovalStatus,
-    customer_id: str,
-    amount: Optional[float] = None,
-) -> Approval:
-    now_string = datetime.now().isoformat()
-    approval = Approval(
-        id=uuid4(),
-        payload=ApprovalPayload(
-            order_id=order_id,
-            reason=reason,
-            amount=amount,
-            type=type,
-            status=status,
-            customer_id=customer_id,
-            created_at=now_string,
-            updated_at=now_string,
-        ),
-    )
+async def create_approval(payload: ApprovalPayload) -> Approval:
+    approval = Approval(id=uuid4(), payload=payload)
 
     conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
