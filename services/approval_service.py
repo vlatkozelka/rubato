@@ -12,17 +12,18 @@ from services.refund_execution_service import execute_refund
 
 logger = logging.getLogger("rubato.services.approval")
 
-_COLUMNS = "id, type, status, payload, reason, created_at, updated_at"
+_COLUMNS = "id, type, status, payload, reason, customer_id, created_at, updated_at"
 
 
 def _row_to_approval(row) -> Approval:
-    id_, type_, status_, payload, reason, created_at, updated_at = row
+    id_, type_, status_, payload, reason, customer_id, created_at, updated_at = row
     return Approval(
         id=id_,
         type=type_,
         status=status_,
         payload=ApprovalPayload(**payload),
         reason=reason,
+        customer_id=customer_id,
         created_at=created_at.isoformat(),
         updated_at=updated_at.isoformat(),
     )
@@ -33,8 +34,8 @@ async def create_approval(approval: Approval) -> Approval:
     cur = conn.cursor()
     await cur.execute(
         f"""
-        INSERT INTO approvals (id, type, status, payload, reason, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO approvals (id, type, status, payload, reason, customer_id, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING {_COLUMNS}
         """,
         (
@@ -43,6 +44,7 @@ async def create_approval(approval: Approval) -> Approval:
             approval.status.value,
             Jsonb(approval.payload.model_dump()),
             approval.reason,
+            approval.customer_id,
             approval.created_at,
             approval.updated_at,
         ),
@@ -132,3 +134,16 @@ async def approve(approval_id: UUID) -> Optional[Approval]:
     await cur.close()
     await conn.close()
     return _row_to_approval(updated_row)
+
+
+async def get_approval_by_id(approval_id: UUID, customer_id: str) -> Optional[Approval]:
+    conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
+    cur = conn.cursor()
+    await cur.execute(
+        f"SELECT {_COLUMNS} FROM approvals WHERE id = %s AND customer_id = %s",
+        (str(approval_id), customer_id),
+    )
+    row = await cur.fetchone()
+    await cur.close()
+    await conn.close()
+    return _row_to_approval(row) if row else None

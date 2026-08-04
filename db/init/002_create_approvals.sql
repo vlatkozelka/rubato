@@ -7,9 +7,14 @@ CREATE TABLE approvals (
         CHECK (status IN ('pending_review', 'approved', 'denied')),
     payload JSONB NOT NULL,
     reason TEXT NOT NULL,
+    -- No FK to customers(id): this script runs before 005_create_customers.sql
+    -- in init order, so the referenced table wouldn't exist yet.
+    customer_id TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_approvals_customer_id ON approvals(customer_id);
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
