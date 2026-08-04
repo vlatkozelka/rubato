@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+from models.agent_mode import AgentMode
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,3 +43,5 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-insecure-secret-change-me")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+
+DEFAULT_AGENT_MODE = AgentMode.PLAN
