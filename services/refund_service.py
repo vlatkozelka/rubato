@@ -23,16 +23,15 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
         if not isinstance(order.status, DeliveredStatus):
             return Approval(
                 id=uuid.uuid4(),
-                reason=reason,
                 payload=ApprovalPayload(
                     order_id=order_id,
-                    reason="Order not yet delivered"
+                    reason="Order not yet delivered",
+                    status=ApprovalStatus.DENIED,
+                    customer_id=customer_id,
+                    created_at=now_string,
+                    updated_at=now_string,
+                    type=ApprovalType.REFUND_REQUEST
                 ),
-                status=ApprovalStatus.DENIED,
-                customer_id=customer_id,
-                created_at=now_string,
-                updated_at=now_string,
-                type=ApprovalType.REFUND_REQUEST
             )
         for item in order.items:
             if item.product_id == product_id:
@@ -47,30 +46,28 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
                     if refund_policy.allowed_duration > days_since_delivery:
                         return Approval(
                             id=uuid.uuid4(),
-                            reason=reason,
                             payload=ApprovalPayload(
                                 order_id=order_id,
-                                reason=f"Order was delivered since {days_since_delivery} days from this request which is less than {refund_policy.allowed_duration} days as mentioned for the refund policy for items of category: {category} "
+                                reason=f"Order was delivered since {days_since_delivery} days from this request which is less than {refund_policy.allowed_duration} days as mentioned for the refund policy for items of category: {category} ",
+                                status=ApprovalStatus.PENDING_REVIEW,
+                                customer_id=customer_id,
+                                created_at=now_string,
+                                updated_at=now_string,
+                                type=ApprovalType.REFUND_REQUEST
                             ),
-                            status=ApprovalStatus.PENDING_REVIEW,
-                            customer_id=customer_id,
-                            created_at=now_string,
-                            updated_at=now_string,
-                            type=ApprovalType.REFUND_REQUEST
                         )
                     else:
                         return Approval(
                             id=uuid.uuid4(),
-                            reason=reason,
                             payload=ApprovalPayload(
                                 order_id=order_id,
-                                reason=f"Order was delivered since {days_since_delivery} days from this request which is more than {refund_policy.allowed_duration} days as mentioned for the refund policy for items of category: {category} "
+                                reason=f"Order was delivered since {days_since_delivery} days from this request which is more than {refund_policy.allowed_duration} days as mentioned for the refund policy for items of category: {category} ",
+                                status=ApprovalStatus.DENIED,
+                                customer_id=customer_id,
+                                created_at=now_string,
+                                updated_at=now_string,
+                                type=ApprovalType.REFUND_REQUEST
                             ),
-                            status=ApprovalStatus.DENIED,
-                            customer_id=customer_id,
-                            created_at=now_string,
-                            updated_at=now_string,
-                            type=ApprovalType.REFUND_REQUEST
                         )
 
                 else:

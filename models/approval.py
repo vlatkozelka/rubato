@@ -9,24 +9,23 @@ class ApprovalType(str, Enum):
     REFUND_REQUEST = "refund_request"
 
 
-class ApprovalPayload(BaseModel):
-    order_id: str
-    reason: str
-    amount: Optional[float] = None
-
-
 class ApprovalStatus(str, Enum):
     PENDING_REVIEW = "pending_review"
     APPROVED = "approved"
     DENIED = "denied"
 
 
-class Approval(BaseModel):
-    id: UUID
+class ApprovalPayload(BaseModel):
+    order_id: str
     reason: str
+    amount: Optional[float] = None
     type: ApprovalType
-    payload: ApprovalPayload
     status: ApprovalStatus
     customer_id: str
     created_at: str
     updated_at: str
+
+
+class Approval(BaseModel):
+    id: UUID
+    payload: ApprovalPayload

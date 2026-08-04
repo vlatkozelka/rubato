@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -19,17 +19,22 @@ def _row_to_approval(row) -> Approval:
     id_, type_, status_, payload, reason, customer_id, created_at, updated_at = row
     return Approval(
         id=id_,
-        type=type_,
-        status=status_,
-        payload=ApprovalPayload(**payload),
-        reason=reason,
-        customer_id=customer_id,
-        created_at=created_at.isoformat(),
-        updated_at=updated_at.isoformat(),
+        payload=ApprovalPayload(
+            order_id=payload["order_id"],
+            reason=payload["reason"],
+            amount=payload.get("amount"),
+            type=type_,
+            status=status_,
+            customer_id=customer_id,
+            created_at=created_at.isoformat(),
+            updated_at=updated_at.isoformat(),
+        ),
     )
 
 
-async def create_approval(approval: Approval) -> Approval:
+async def create_approval(payload: ApprovalPayload) -> Approval:
+    approval = Approval(id=uuid4(), payload=payload)
+
     conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     cur = conn.cursor()
     await cur.execute(
@@ -40,13 +45,13 @@ async def create_approval(approval: Approval) -> Approval:
         """,
         (
             str(approval.id),
-            approval.type.value,
-            approval.status.value,
-            Jsonb(approval.payload.model_dump()),
-            approval.reason,
-            approval.customer_id,
-            approval.created_at,
-            approval.updated_at,
+            approval.payload.type.value,
+            approval.payload.status.value,
+            Jsonb(approval.payload.model_dump(mode="json")),
+            approval.payload.reason,
+            approval.payload.customer_id,
+            approval.payload.created_at,
+            approval.payload.updated_at,
         ),
     )
     row = await cur.fetchone()
@@ -75,11 +80,11 @@ async def deny(approval_id: UUID, reason: str) -> Optional[Approval]:
     await cur.execute(
         f"""
         UPDATE approvals
-        SET status = %s, reason = %s, updated_at = now()
+        SET status = %s, reason = %s, payload = payload || jsonb_build_object('reason', %s::text), updated_at = now()
         WHERE id = %s AND status = %s
         RETURNING {_COLUMNS}
         """,
-        (ApprovalStatus.DENIED.value, reason, str(approval_id), ApprovalStatus.PENDING_REVIEW.value),
+        (ApprovalStatus.DENIED.value, reason, reason, str(approval_id), ApprovalStatus.PENDING_REVIEW.value),
     )
     row = await cur.fetchone()
     await conn.commit()
@@ -127,7 +132,7 @@ async def approve(approval_id: UUID) -> Optional[Approval]:
         WHERE id = %s
         RETURNING {_COLUMNS}
         """,
-        (ApprovalStatus.APPROVED.value, Jsonb(approval.payload.model_dump()), str(approval_id)),
+        (ApprovalStatus.APPROVED.value, Jsonb(approval.payload.model_dump(mode="json")), str(approval_id)),
     )
     updated_row = await cur.fetchone()
     await conn.commit()
