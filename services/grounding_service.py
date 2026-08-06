@@ -1,19 +1,13 @@
 import logging
 
-import instructor
-from openai import AsyncOpenAI
-
-from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from models.agent_observation import AgentObservation
 from models.decisions import ComplexCaseResolution
 from models.grounding_verdict import GroundingVerdict
+from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger(__name__)
 
-client = instructor.from_openai(
-    AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
-    mode=instructor.Mode.JSON_SCHEMA,
-)
+client = get_async_instructor_client("qwen3_non_thinking")
 
 
 def _format_observations(observations: list[AgentObservation]) -> str:
@@ -55,19 +49,9 @@ action. Only flag actual completed-action claims, not descriptions of
 investigation or next steps.
 """
 
-    verdict = await client.chat.completions.create(
-        model=LLM_MODEL,
+    verdict = await client(
         response_model=GroundingVerdict,
         messages=[{"role": "user", "content": prompt}],
-        extra_body={
-            "chat_template_kwargs": {"enable_thinking": False},
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "top_k": 20,
-            "min_p": 0.0,
-            "presence_penalty": 1.5,
-            "repetition_penalty": 1.0,
-        }
     )
 
     if not verdict.is_grounded:
