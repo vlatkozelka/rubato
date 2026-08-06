@@ -2,11 +2,8 @@ import logging
 import re
 from typing import Optional
 
-import instructor
-from openai import AsyncOpenAI
-
-from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from models.injection import InjectionCheckResult, InjectionSource, InjectionClassification
+from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +28,7 @@ class InjectionDetector:
             (re.compile(pattern, re.IGNORECASE), reason)
             for pattern, reason in HEURISTIC_PATTERNS
         ]
-
-    client = instructor.from_openai(
-        AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
-        mode=instructor.Mode.JSON_SCHEMA,
-    )
+        self.client = get_async_instructor_client("qwen3_non_thinking")
 
     def check_heuristics(self, message: str) -> Optional[str]:
         for pattern, reason in self._compiled:
@@ -45,8 +38,7 @@ class InjectionDetector:
 
     async def check_classifier(self, message: str) -> Optional[str]:
 
-        result = await self.client.chat.completions.create(
-            model=LLM_MODEL,
+        result = await self.client(
             response_model=InjectionClassification,
             messages=[
                 {
@@ -64,15 +56,6 @@ class InjectionDetector:
                 },
                 {"role": "user", "content": message},
             ],
-            extra_body={
-                "chat_template_kwargs": {"enable_thinking": False},
-                "temperature": 0.7,
-                "top_p": 0.8,
-                "top_k": 20,
-                "min_p": 0.0,
-                "presence_penalty": 1.5,
-                "repetition_penalty": 1.0,
-            },
         )
         return result.reason if result.is_injection else None
 

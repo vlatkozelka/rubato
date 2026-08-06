@@ -1,18 +1,12 @@
 import logging
 
-import instructor
-from openai import AsyncOpenAI
-
-from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from app.timing import log_duration
 from models.triage_result import TriageResult
+from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger("rubato.services.triage")
 
-client = instructor.from_openai(
-    AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
-    mode=instructor.Mode.JSON_SCHEMA,
-)
+client = get_async_instructor_client("qwen3_non_thinking")
 
 SYSTEM_PROMPT = """
 You are a triage classifier for an e-commerce support inbox. Classify each
@@ -94,8 +88,7 @@ async def triage_message(message: str, history: list[Turn] | None = None) -> Tri
     ]
 
     with log_duration(logger, "llm_call_finished", service="triage_service", function="triage_message"):
-        return await client.chat.completions.create(
-            model=LLM_MODEL,
+        return await client(
             response_model=TriageResult,
             max_retries=3,
             messages=[
@@ -103,13 +96,4 @@ async def triage_message(message: str, history: list[Turn] | None = None) -> Tri
                 *history_messages,
                 {"role": "user", "content": message},
             ],
-            extra_body={
-                "chat_template_kwargs": {"enable_thinking": False},
-                "temperature": 0.7,
-                "top_p": 0.8,
-                "top_k": 20,
-                "min_p": 0.0,
-                "presence_penalty": 1.5,
-                "repetition_penalty": 1.0,
-            },
         )

@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from typing import List
 
 import psycopg
-from openai import AsyncOpenAI
 
-from app.config import POSTGRES_DSN, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+from app.config import POSTGRES_DSN
 from models.turn import Turn
+from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger("rubato.services.conversation")
 
@@ -64,7 +64,7 @@ async def save_conversation_turn(
 HISTORY_TOKEN_BUDGET = 3000  # rough char/4 estimate, not exact tokenization
 KEEP_VERBATIM_TURNS = 6
 
-plain_client = AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+plain_client = get_async_instructor_client("qwen3_non_thinking")
 
 
 def _estimate_tokens(turns: list[Turn]) -> int:
@@ -74,8 +74,7 @@ def _estimate_tokens(turns: list[Turn]) -> int:
 
 async def _summarize_turns(turns: list[Turn]) -> Turn:
     transcript = "\n".join(f"{t.role}: {t.content}" for t in turns)
-    response = await plain_client.chat.completions.create(
-        model=LLM_MODEL,
+    response = await plain_client(
         messages=[
             {
                 "role": "system",

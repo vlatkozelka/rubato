@@ -1,14 +1,24 @@
 import asyncio
+import sys
 
 from services.policy_service import answer_policy_question
 
-result = asyncio.run(answer_policy_question("How many days do I have to return an opened software license?"))
-print(f"{result}\n\n\n\n")
 
-# the actual stress test — the contradiction
-result2 = asyncio.run(answer_policy_question("My jacket arrived defective, how long do I have to report it?"))
-print(f"{result2}\n\n\n\n")
+async def _test():
+    messages = [
+        "How many days do I have to return an opened software license?",
+        "My jacket arrived defective, how long do I have to report it?",
+        "Do you offer gift wrapping?",
+        "What is the refund policy window for electronics like fitness trackers?"
+    ]
 
-# the honest "I don't know" case — ask something not in any doc
-result3 = asyncio.run(answer_policy_question("Do you offer gift wrapping?"))
-print(f"{result3}\n\n\n\n")
+    for message in messages:
+        print(f"{message}\n")
+        result = await answer_policy_question(message, 3)
+        print(f"{result}\n\n\n")
+
+
+if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(_test())

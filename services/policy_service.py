@@ -1,21 +1,15 @@
 import asyncio
 import logging
 
-import instructor
-from openai import AsyncOpenAI
-
-from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from app.timing import log_duration
 from models.policy_answer import PolicyAnswer
 from models.refund_policy import RefundPolicy
+from services.llm_factory import get_async_instructor_client
 from services.retrieval_service import retrieve_chunks
 
 logger = logging.getLogger("rubato.services.policy_qa")
 
-client = instructor.from_openai(
-    AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
-    mode=instructor.Mode.JSON_SCHEMA,
-)
+client = get_async_instructor_client("qwen3_non_thinking")
 
 
 async def _create_excerpts(query: str, top_k: int) -> str:
@@ -69,11 +63,9 @@ async def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
     """
 
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="answer_policy_question"):
-        return await client.chat.completions.create(
-            model=LLM_MODEL,
+        return await client(
             response_model=PolicyAnswer,
             max_retries=3,
-            temperature=0,
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
@@ -111,11 +103,9 @@ Category: {category}
 """
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="get_refund_policy"):
         try:
-            return await client.chat.completions.create(
-                model=LLM_MODEL,
+            return await client(
                 response_model=RefundPolicy,
                 max_retries=3,
-                temperature=0,
                 messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
