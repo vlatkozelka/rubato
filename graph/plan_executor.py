@@ -1,22 +1,17 @@
 import json
 
-import instructor
 from langchain_core.tools import BaseTool
-from openai import AsyncOpenAI
 
-from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 from graph.graph_utils import stringify_result
 from models.plan import Plan, PlanStepArgs
+from services.llm_factory import get_async_instructor_client
 
 
 async def execute_plan(plan: Plan, tools: list[BaseTool], customer_id: str, conversation_history: str) -> list[dict]:
     tools_by_name = {t.name: t for t in tools}
     observations = []
 
-    client = instructor.from_openai(
-        AsyncOpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
-        mode=instructor.Mode.JSON_SCHEMA,
-    )
+    client=get_async_instructor_client("qwen3_non_thinking")
 
     for step in plan.steps:
         if step.tool_hint is None or step.tool_hint not in tools_by_name:
@@ -53,19 +48,9 @@ and prior results. If a required value isn't available anywhere, leave
 it out rather than guessing.
 """
         try:
-            step_args = await client.chat.completions.create(
-                model=LLM_MODEL,
+            step_args = await client(
                 response_model=PlanStepArgs,
                 messages=[{"role": "user", "content": arg_prompt}],
-                extra_body={
-                    "chat_template_kwargs": {"enable_thinking": False},
-                    "temperature": 0.7,
-                    "top_p": 0.8,
-                    "top_k": 20,
-                    "min_p": 0.0,
-                    "presence_penalty": 1.5,
-                    "repetition_penalty": 1.0,
-                }
             )
             result = await tool.ainvoke(step_args.args)
         except Exception as e:

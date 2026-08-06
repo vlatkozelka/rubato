@@ -1,15 +1,14 @@
 from langchain_core.globals import set_debug
 
 from graph.graph_utils import extract_observations, build_tool_registry
+from services.llm_factory import get_chat_model
 
 set_debug(True)
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_openai import ChatOpenAI
 
-from app.config import LLM_MODEL, LLM_BASE_URL, LLM_API_KEY
 from mcp_client.client import get_safe_langchain_tools
 from models.conversation_state import ConversationState
 from models.decisions import ComplexCaseResolution
@@ -64,21 +63,7 @@ When you're done, produce:
   and note any action tool you called.
 - citations: policy doc sources you relied on, if any."""
 
-_model = ChatOpenAI(
-    base_url=LLM_BASE_URL,
-    api_key=LLM_API_KEY,
-    model=LLM_MODEL,
-    temperature=1.0,
-    top_p=0.95,
-    presence_penalty=1.5,
-    model_kwargs={
-        "extra_body": {
-            "top_k": 20,
-            "min_p": 0.0,
-            "repetition_penalty": 1.0,
-        }
-    }
-)
+_model = get_chat_model("qwen3_thinking")
 
 
 def _build_agent(customer_id: str, tools):
