@@ -973,6 +973,35 @@ eval set should carry as a labeled fixture rather than something
 hand-patched from a single observed instance.
 
 
+---
+
+## Phase 10 — Scope decision: guardrail-out (general) and rate limiting deferred
+
+**Guardrail (out), general node — not built.** The architecture doc's
+broader output-validation node (citation-presence enforcement across
+all paths, business-rule checks, schema validation before every
+response) was scoped but not implemented. Reasoning: the
+`agent_grounding_node` built for complex_case already covers the
+concrete, real bug this phase existed to catch (see prior entry) —
+it's the same underlying principle (don't let a response assert
+something not backed by what actually happened) applied narrowly to
+where it was proven to matter. Generalizing it across every path
+without a second observed failure to justify it would be building
+ahead of evidence, not closing a known gap. Revisit if Phase 12 evals
+surface a concrete case on another path.
+
+**Rate limiting — not built.** Scoped (FastAPI middleware,
+`customer_id`-keyed, fixed/sliding window) but deprioritized. No
+technical blocker — this is a standalone decision to not spend time
+here right now, separate from anything else in Phase 10.
+
+**Phase 10 is being treated as functionally complete** on the pieces
+that were actually built and verified: injection detection (10.1), PII
+redaction (10.2), and complex-case resolution grounding (10.3). The
+remaining scoped items are deferred, not abandoned — they can be
+picked back up standalone at any point since neither depends on
+anything else in the current build sequence.
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
