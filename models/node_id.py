@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class NodeId(str, Enum):
+    GUARDRAIL_IN = "guardrail_in"
     TRIAGE = "triage"
     CHECK_ORDER_STATUS = "check_order_status"
     ANSWER_POLICY_QUESTION = "answer_policy_question"

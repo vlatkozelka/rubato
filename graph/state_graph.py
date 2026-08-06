@@ -6,7 +6,9 @@ from langgraph.graph import StateGraph
 
 from graph.instrumentation import instrumented_node
 from graph.nodes.complex_node import complex_case_node
-from graph.nodes.simple_nodes import triage_node, check_order_status_node, check_price_node, answer_policy_question_node, greet_node, \
+from graph.nodes.guardrail_in_node import guardrail_in_node
+from graph.nodes.simple_nodes import triage_node, check_order_status_node, check_price_node, \
+    answer_policy_question_node, greet_node, \
     refund_request_node, return_request_node
 from models.conversation_state import ConversationState
 from models.intent import Intent
@@ -15,6 +17,7 @@ from models.node_id import NodeId
 logger = logging.getLogger("rubato.graph.router")
 
 graph = StateGraph(ConversationState)
+graph.add_node(NodeId.GUARDRAIL_IN, instrumented_node(NodeId.GUARDRAIL_IN.value, guardrail_in_node))
 graph.add_node(NodeId.TRIAGE, instrumented_node(NodeId.TRIAGE.value, triage_node))
 graph.add_node(NodeId.CHECK_ORDER_STATUS, instrumented_node(NodeId.CHECK_ORDER_STATUS.value, check_order_status_node))
 graph.add_node(NodeId.CHECK_PRICE, instrumented_node(NodeId.CHECK_PRICE.value, check_price_node))
@@ -24,7 +27,14 @@ graph.add_node(NodeId.GREET, instrumented_node(NodeId.GREET.value, greet_node))
 graph.add_node(NodeId.HANDLE_REFUND_REQUEST, instrumented_node(NodeId.HANDLE_REFUND_REQUEST.value, refund_request_node))
 graph.add_node(NodeId.HANDLE_RETURN_REQUEST, instrumented_node(NodeId.HANDLE_RETURN_REQUEST.value, return_request_node))
 graph.add_node(NodeId.PROCESS_COMPLEX_CASE, instrumented_node(NodeId.PROCESS_COMPLEX_CASE.value, complex_case_node))
-graph.set_entry_point(NodeId.TRIAGE)
+graph.set_entry_point(NodeId.GUARDRAIL_IN)
+
+
+def route_post_guardrail_in(state: ConversationState) -> str:
+    if state.reply is not None:
+        return END
+    else:
+        return NodeId.TRIAGE
 
 
 def traverse(state: ConversationState) -> str:
@@ -54,8 +64,6 @@ def traverse(state: ConversationState) -> str:
                 target_node = NodeId.GREET
             case Intent.COMPLEX_CASE:
                 target_node = NodeId.PROCESS_COMPLEX_CASE
-            case _:
-                target_node = None
 
         logger.info(
             "router_decision",
@@ -79,6 +87,15 @@ path_map = {
     # everything else routes to END until those nodes exist
     NodeId.ASSIGN_TO_HUMAN: END,
 }
+graph.add_conditional_edges(
+    NodeId.GUARDRAIL_IN,
+    route_post_guardrail_in,
+    {
+        NodeId.TRIAGE: NodeId.TRIAGE,
+        END: END
+    },
+)
+
 graph.add_conditional_edges(
     NodeId.TRIAGE,
     traverse,
