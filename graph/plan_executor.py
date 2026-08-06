@@ -56,6 +56,15 @@ it out rather than guessing.
                 model=LLM_MODEL,
                 response_model=PlanStepArgs,
                 messages=[{"role": "user", "content": arg_prompt}],
+                extra_body={
+                    "chat_template_kwargs": {"enable_thinking": False},
+                    "temperature": 0.7,
+                    "top_p": 0.8,
+                    "top_k": 20,
+                    "min_p": 0.0,
+                    "presence_penalty": 1.5,
+                    "repetition_penalty": 1.0,
+                }
             )
             result = await tool.ainvoke(step_args.args)
         except Exception as e:

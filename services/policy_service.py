@@ -73,11 +73,19 @@ async def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
             model=LLM_MODEL,
             response_model=PolicyAnswer,
             max_retries=3,
-            temperature=0,
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
             ],
+            extra_body={
+                "chat_template_kwargs": {"enable_thinking": False},
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 20,
+                "min_p": 0.0,
+                "presence_penalty": 1.5,
+                "repetition_penalty": 1.0,
+            }
         )
 
 
@@ -115,11 +123,19 @@ Category: {category}
                 model=LLM_MODEL,
                 response_model=RefundPolicy,
                 max_retries=3,
-                temperature=0,
                 messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
-                ],
-            )
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
+            ],
+            extra_body={
+                "chat_template_kwargs": {"enable_thinking": False},
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 20,
+                "min_p": 0.0,
+                "presence_penalty": 1.5,
+                "repetition_penalty": 1.0,
+            }
+        )
         except asyncio.CancelledError:
             raise

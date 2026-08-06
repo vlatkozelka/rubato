@@ -87,6 +87,15 @@ async def _summarize_turns(turns: list[Turn]) -> Turn:
             },
             {"role": "user", "content": transcript},
         ],
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": False},
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 1.5,
+            "repetition_penalty": 1.0,
+        }
     )
     summary_text = response.choices[0].message.content
     content = f"[Earlier conversation summary]: {summary_text}"

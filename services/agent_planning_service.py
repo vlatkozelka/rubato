@@ -41,6 +41,14 @@ Limit steps to 20 maximum. Aim for minimizing the number of steps
         model=LLM_MODEL,
         response_model=Plan,
         messages=[{"role": "user", "content": prompt}],
+        extra_body={
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 1.5,
+            "repetition_penalty": 1.0,
+        }
     )
 
 
@@ -71,4 +79,13 @@ the customer.
         model=LLM_MODEL,
         response_model=ComplexCaseResolution,
         messages=[{"role": "user", "content": prompt}],
+        extra_body={
+            "chat_template_kwargs": {"enable_thinking": False},
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 1.5,
+            "repetition_penalty": 1.0,
+        }
     )
