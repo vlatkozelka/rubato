@@ -1002,6 +1002,55 @@ remaining scoped items are deferred, not abandoned — they can be
 picked back up standalone at any point since neither depends on
 anything else in the current build sequence.
 
+---
+
+## Phase 11 — LLM client abstraction (LiteLLM)
+
+Replaced ad-hoc instructor/AsyncOpenAI/ChatOpenAI construction at every
+call site with a shared factory (services/llm_factory.py) over named
+LiteLLM profiles (services/llm_profiles.py): qwen3_thinking,
+qwen3_non_thinking, qwen3_agent. Motivation: inline extra_body/model_kwargs
+duplication at every call site made A/B testing thinking vs non-thinking
+configs slow and error-prone. Profiles are the single source of truth;
+swapping a call site's behavior is now a one-line profile-name change.
+vLLM requires the litellm model string to carry a provider prefix
+(hosted_vllm/<model> or openai/<model>) — bare model names fail with
+"LLM Provider NOT provided". chat_template_kwargs (e.g. enable_thinking)
+must be passed as a top-level kwarg to litellm.completion/acompletion,
+not nested in extra_body — confirmed via reasoning_content presence/
+absence on a live vLLM call, both instructor and ChatLiteLLM paths.
+
+## Phase 11 — Observability backend: Langfuse (self-hosted), v4
+
+Chose Langfuse over hand-rolled JSONL, breaking from this project's
+usual "hand-roll first, name the off-the-shelf alternative" pattern —
+the raw-JSON logs from instrumented_node were the explicit pain point,
+and Langfuse's SDK is OTel-based, so adopting it also resolves the
+Event-union design question from earlier without hand-building one.
+
+Self-hosted (not Cloud) to keep it a genuine LLMOps talking point and
+avoid Cloud's Hobby-tier 50k-unit/30-day-retention ceiling, which
+Phase 12's eval suite would likely hit fast.
+
+Deployed on v4, not v3, despite starting mid-transition: v3 self-hosted
+security patches end January 2027; Cloud already defaults new orgs to
+v4; and a fresh install has zero migration cost either way, so v4 is
+the correct target with no offsetting downside.
+
+## Phase 11 — Incident: worker/web version mismatch, silent failure
+
+Self-hosted stack: bumped langfuse-web to :4 but left langfuse-worker
+on :3. Zero errors on either side — worker processed and wrote traces
+successfully, just into the old v3 ClickHouse schema (traces/
+observations/scores tables) instead of v4's events_full, which the v4
+UI never queries. ~1hr lost chasing Redis socket-timeout noise (a real
+but unrelated self-hosted Langfuse issue on idle integration queues)
+before diffing the actual compose file surfaced the mismatched tag.
+Lesson: for silent, no-error multi-container failures, diff the actual
+deployed config against intent before drilling into a dependency's
+internals.
+
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency

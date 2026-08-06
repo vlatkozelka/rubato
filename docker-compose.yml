@@ -1,22 +1,4 @@
 services:
-  app:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:1234/v1}
-      - LLM_API_KEY=${LLM_API_KEY:-lm-studio}
-      - LLM_MODEL=${LLM_MODEL:-qwen2.5-14b-instruct}
-      - POSTGRES_DSN=${POSTGRES_DSN:-postgresql://rubato:rubato@db:5432/rubato}
-    extra_hosts:
-      # Lets the container reach LM Studio running on the host machine.
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./app:/srv/app
-      - ./docs:/srv/docs
-    depends_on:
-      - db
-
   db:
     image: pgvector/pgvector:pg16
     environment:
@@ -29,13 +11,106 @@ services:
       - rubato_pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d
 
-  # --- Uncomment starting Phase 11 (tracing) ---
-  # langfuse:
-  #   image: langfuse/langfuse:2
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - db
+  # --- Langfuse v3 self-hosted stack ---
+
+  langfuse-db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+      - POSTGRES_DB=langfuse
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    restart: always
+    environment:
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=clickhouse
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-minio:
+    image: minio/minio
+    restart: always
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9091" /data'
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9091:9091"
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:4
+    restart: always
+    depends_on:
+      langfuse-db: { condition: service_healthy }
+      langfuse-clickhouse: { condition: service_healthy }
+      langfuse-redis: { condition: service_healthy }
+      langfuse-minio: { condition: service_healthy }
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      SALT: ${LANGFUSE_SALT:-CHANGE_ME_openssl_rand_hex_32}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-CHANGE_ME_openssl_rand_hex_32}
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_CONNECTION_STRING: redis://langfuse-redis:6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minioadmin
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: minioadmin
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+
+  langfuse-web:
+    image: langfuse/langfuse:4
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      langfuse-worker: { condition: service_started }
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-CHANGE_ME_openssl_rand_hex_32}
 
 volumes:
   rubato_pgdata:
+  langfuse_pgdata:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
