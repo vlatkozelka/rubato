@@ -884,6 +884,94 @@ help but does not fully resolve it. Deliberately not chased further
 now — this is exactly what Phase 12 evals exists to quantify, not
 something to hand-tune against a handful of manual tests.
 
+---
+
+## Phase 10 — Complex-case resolution grounding
+
+**Problem:** `resolve_from_observations` (and its ReAct equivalent) had
+no constraint keeping customer-facing claims tied to what actually
+happened. Confirmed live: a resolution narrated an approved refund
+with no backing tool call in that run's observations.
+
+**Root cause found before building a fix:** `create_approval_tool`'s
+name and docstring never stated the approval was *pending*, not
+executed. A model summarizing its own tool call had no signal telling
+it "created an approval" ≠ "refund happened." Renamed to
+`create_pending_approval_tool` with an explicit docstring stating the
+action is not final and requires human review. This is very likely
+what was driving the original hallucination, not a resolver-prompt
+weakness on its own.
+
+**Grounding check: LLM-as-judge, not regex.** Considered a
+deterministic pattern-match approach first for cost/testability
+reasons, but the field's actual standard for this problem (RAGAS
+faithfulness, TruLens, DeepEval, NeMo Guardrails' fact-checking rail)
+is entailment-style LLM verification, and regex can't reliably cover
+paraphrased claims. Built as one `instructor` call
+(`GroundingChecker.check_and_correct`) that both detects an ungrounded
+claim and produces a corrected `customer_message` in the same voice —
+avoids the "canned fallback string mid-reply" problem a
+detect-then-block approach would have had.
+
+**Non-thinking model config for the grounding call.** Unlike ReAct's
+tool-use loop (which requires thinking mode for this Qwen build),
+grounding is a bounded verification task, not open-ended reasoning —
+matches the project's existing model-routing principle (cheap/fast
+path for narrow structured tasks).
+
+**Tool descriptions included in the grounding prompt.** A bare tool
+name isn't enough context for the checker to judge whether a claim
+matches what the tool actually does — same ambiguity problem that
+caused the original bug, just moved to verification time. Tool
+registry (`{name: description}`) built once from the existing MCP tool
+list, passed to `GroundingChecker` at construction, not fetched
+per-call.
+
+**Shared `AgentObservation` shape across both agent modes.** ReAct's
+`extract_observations` (parsed from LangChain message history) and
+PAE's `execute_plan` (already-structured) both normalize into the same
+model, so one grounding checker serves both paths with no
+mode-specific branching. Required flattening `ToolMessage.content`,
+which is inconsistently either a plain string or a list of text
+blocks depending on the tool — same normalization now applied on both
+the ReAct and PAE side via a shared `_stringify_result` helper.
+
+**Placement: runtime node, not a resolver-prompt constraint.** Could
+have folded "only claim backed actions" into the resolver's own
+prompt instead of adding a separate pass. Kept as an independent node
+(`agent_grounding_node`, runs after `process_complex_case`,
+mode-agnostic) because a model grading its own just-written output is
+a weaker check than an independent verification call — same reasoning
+RAGAS-style faithfulness scoring is a separate metric rather than
+self-reported by the generator.
+
+**Reasoning-only steps not modeled, and that's fine.** Neither
+ReAct nor PAE currently produce reasoning-only observations in
+practice — ReAct's model runs with thinking disabled (Phase 9's Jinja
+fix), so every `AIMessage` step is tool-call-only, and PAE's executor
+always attaches a `tool_hint` per step. Grounding doesn't need
+reasoning text anyway (only actual tool results are evidence), so this
+wasn't built defensively for a case that doesn't occur — worth
+revisiting only if the model config changes.
+
+**Verified end-to-end on real runs**, both agent modes, including one
+case where the checker correctly passed through a genuinely grounded
+resolution (no rewrite needed) and one where it correctly distinguished
+"submitted for review" from an executed action.
+
+**Known, deliberately deferred, not fixed now:** the checker currently
+only catches claims of *already-completed* actions. It does not yet
+catch claims that overstate certainty about a still-pending action
+(e.g. "we will process your refund" stated as a near-certain outcome,
+when only a pending approval — not a guaranteed one — actually
+exists). Found live in a PAE run. Left as a known gap rather than
+tightened immediately — the mechanism (LLM-as-judge over observations)
+is proven and correct for its current scope; extending the prompt to
+also flag overstated-certainty language is a small, well-understood
+follow-up, not a redesign, and is exactly the kind of case Phase 12's
+eval set should carry as a labeled fixture rather than something
+hand-patched from a single observed instance.
+
 
 ## Open questions to answer as later phases land
 
