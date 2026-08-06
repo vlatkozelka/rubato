@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from app.auth import require_customer
@@ -15,6 +16,7 @@ from app.logging_setup import configure_logging
 from app.security import create_access_token
 from app.timing import log_duration
 from graph.state_graph import app_graph
+from models.agent_mode import AgentMode
 from models.auth_principal import AuthPrincipal
 from models.conversation_state import ConversationState
 from models.intent import Intent
@@ -162,7 +164,7 @@ async def support_message(
             extra={
                 "event": "request_received",
                 "customer_id": customer_id,
-                "message_preview": redactor.redact_text(_preview(payload.message),customer),
+                "message_preview": redactor.redact_text(_preview(payload.message), customer),
             },
         )
 
@@ -179,7 +181,9 @@ async def support_message(
                 customer_profile=customer_profile,
             )
 
-            raw_result = await app_graph.ainvoke(state)
+            raw_result = await app_graph.ainvoke(input=state,
+                                                 config=RunnableConfig(configurable={"agent_mode": AgentMode.PLAN})
+                                                 )
             result_state = ConversationState.model_validate(raw_result)
 
             response = _build_support_response(payload.conversation_id, result_state)
@@ -193,7 +197,8 @@ async def support_message(
 
         return response
 
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
 
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)

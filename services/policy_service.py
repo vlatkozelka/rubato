@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import instructor
@@ -109,13 +110,16 @@ Rules:
 Category: {category}
 """
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="get_refund_policy"):
-        return await client.chat.completions.create(
-            model=LLM_MODEL,
-            response_model=RefundPolicy,
-            max_retries=3,
-            temperature=0,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
-            ],
-        )
+        try:
+            return await client.chat.completions.create(
+                model=LLM_MODEL,
+                response_model=RefundPolicy,
+                max_retries=3,
+                temperature=0,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"Policy excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
+                ],
+            )
+        except asyncio.CancelledError:
+            raise

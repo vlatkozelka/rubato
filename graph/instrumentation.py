@@ -1,6 +1,9 @@
+import inspect
 import logging
 import time
 from typing import Awaitable, Callable
+
+from langchain_core.runnables import RunnableConfig
 
 from app.timing import elapsed_ms
 from models.conversation_state import ConversationState
@@ -13,7 +16,8 @@ NodeFn = Callable[[ConversationState], Awaitable[ConversationState]]
 
 
 def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
-    async def wrapper(state: ConversationState) -> ConversationState:
+    wants_config = "config" in inspect.signature(node_fn).parameters
+    async def wrapper(state: ConversationState, config: RunnableConfig) -> ConversationState:
         logger.info(
             "node_started",
             extra={
@@ -26,7 +30,10 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
         start = time.perf_counter()
 
         try:
-            new_state = await node_fn(state)
+            if wants_config:
+                new_state = await node_fn(state, config)
+            else:
+                new_state = await node_fn(state)
         except Exception:
             logger.error(
                 "node_finished",
