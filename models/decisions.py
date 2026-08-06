@@ -10,9 +10,11 @@ class ComplexCaseResolution(BaseModel):
         final decision. This is the ONLY way to send a reply back to the
         customer; do not attempt to communicate with them through any other
         tool."""
-    customer_message: str = Field(
-        description="The full reply to send back to the customer. Plain, "
-                     "warm, no internal policy mechanics or reasoning."
+    reply: str = Field(
+        description="Your reply to the customer — written by you, addressing "
+                    "their situation. This is NOT the customer's original "
+                    "message repeated back; it is your response to it. "
+                    "Plain, warm, no internal policy mechanics or reasoning."
     )
     reasoning: str = Field(
         description="Internal justification for this resolution, written "

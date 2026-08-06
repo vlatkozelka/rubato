@@ -12,3 +12,4 @@ class NodeId(str, Enum):
     ASSIGN_TO_HUMAN = "assign_to_human"
     GREET = "greet"
     PROCESS_COMPLEX_CASE = "process_complex_case"
+    AGENT_GROUNDING = "agent_grounding"

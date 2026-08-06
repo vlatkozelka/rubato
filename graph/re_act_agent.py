@@ -1,5 +1,7 @@
 from langchain_core.globals import set_debug
 
+from graph.graph_utils import extract_observations, build_tool_registry
+
 set_debug(True)
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
@@ -87,6 +89,7 @@ def _build_agent(customer_id: str, tools):
         response_format=ToolStrategy(ComplexCaseResolution),
     )
 
+
 async def call_agent(state: ConversationState) -> ConversationState:
     messages = [
         HumanMessage(content=turn.content) if turn.role == "user"
@@ -96,14 +99,18 @@ async def call_agent(state: ConversationState) -> ConversationState:
     messages.append(HumanMessage(content=state.message))
 
     tools = await get_safe_langchain_tools()
+    tools_dict = build_tool_registry(tools)
     agent = _build_agent(state.customer_id, tools)
 
     result = await agent.ainvoke({"messages": messages},
                                  config=RunnableConfig(recursion_limit=15),
                                  )
+    observations = extract_observations(result["messages"], tools_dict)
     resolution: ComplexCaseResolution = result["structured_response"]
 
-    state.reply = resolution.customer_message
+    state.reply = resolution.reply
     state.citations = resolution.citations or None
+    state.observations = observations
+    state.complex_case_resolution = resolution
 
     return state

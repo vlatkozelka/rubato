@@ -5,6 +5,7 @@ from langchain_core.tools import BaseTool
 from openai import AsyncOpenAI
 
 from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+from graph.graph_utils import stringify_result
 from models.plan import Plan, PlanStepArgs
 
 
@@ -71,10 +72,10 @@ it out rather than guessing.
             result = {"error": str(e)}
 
         observations.append({
-            "step_id": step.step_id,
+            "step_id": str(step.step_id),
             "description": step.description,
             "tool": step.tool_hint,
-            "result": result,
+            "result": stringify_result(result),
         })
 
     return observations

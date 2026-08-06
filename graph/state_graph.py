@@ -5,6 +5,7 @@ from langgraph.constants import END
 from langgraph.graph import StateGraph
 
 from graph.instrumentation import instrumented_node
+from graph.nodes.agent_grounding_node import agent_grounding_node
 from graph.nodes.complex_node import complex_case_node
 from graph.nodes.guardrail_in_node import guardrail_in_node
 from graph.nodes.simple_nodes import triage_node, check_order_status_node, check_price_node, \
@@ -27,6 +28,7 @@ graph.add_node(NodeId.GREET, instrumented_node(NodeId.GREET.value, greet_node))
 graph.add_node(NodeId.HANDLE_REFUND_REQUEST, instrumented_node(NodeId.HANDLE_REFUND_REQUEST.value, refund_request_node))
 graph.add_node(NodeId.HANDLE_RETURN_REQUEST, instrumented_node(NodeId.HANDLE_RETURN_REQUEST.value, return_request_node))
 graph.add_node(NodeId.PROCESS_COMPLEX_CASE, instrumented_node(NodeId.PROCESS_COMPLEX_CASE.value, complex_case_node))
+graph.add_node(NodeId.AGENT_GROUNDING, instrumented_node(NodeId.AGENT_GROUNDING.value, agent_grounding_node))
 graph.set_entry_point(NodeId.GUARDRAIL_IN)
 
 
@@ -84,6 +86,7 @@ path_map = {
     NodeId.HANDLE_RETURN_REQUEST: NodeId.HANDLE_RETURN_REQUEST,
     NodeId.HANDLE_REFUND_REQUEST: NodeId.HANDLE_REFUND_REQUEST,
     NodeId.PROCESS_COMPLEX_CASE: NodeId.PROCESS_COMPLEX_CASE,
+    NodeId.AGENT_GROUNDING: NodeId.AGENT_GROUNDING,
     # everything else routes to END until those nodes exist
     NodeId.ASSIGN_TO_HUMAN: END,
 }
@@ -108,7 +111,9 @@ graph.add_edge(NodeId.ANSWER_POLICY_QUESTION, END)
 graph.add_edge(NodeId.GREET, END)
 graph.add_edge(NodeId.HANDLE_REFUND_REQUEST, END)
 graph.add_edge(NodeId.HANDLE_RETURN_REQUEST, END)
+graph.add_edge(NodeId.PROCESS_COMPLEX_CASE, NodeId.AGENT_GROUNDING)
 graph.add_edge(NodeId.PROCESS_COMPLEX_CASE, END)
+
 
 app_graph = graph.compile()
 
