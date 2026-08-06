@@ -28,8 +28,7 @@ class InjectionDetector:
             (re.compile(pattern, re.IGNORECASE), reason)
             for pattern, reason in HEURISTIC_PATTERNS
         ]
-
-    client = get_async_instructor_client("qwen3_non_thinking")
+        self.client = get_async_instructor_client("qwen3_non_thinking")
 
     def check_heuristics(self, message: str) -> Optional[str]:
         for pattern, reason in self._compiled:
