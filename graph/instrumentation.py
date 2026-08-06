@@ -4,22 +4,24 @@ from typing import Awaitable, Callable
 
 from app.timing import elapsed_ms
 from models.conversation_state import ConversationState
+from services.pii_redactor import PiiRedactor
 
 logger = logging.getLogger("rubato.graph.nodes")
+redactor = PiiRedactor()
 
 NodeFn = Callable[[ConversationState], Awaitable[ConversationState]]
 
 
 def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
-    """Wrap a node function with entry/exit/timing/error logging.
-
-    Applied when nodes are registered on the StateGraph, so node functions
-    in graph/simple_nodes.py stay free of logging concerns. Reused for every node —
-    new nodes get this instrumentation for free by wrapping them the same way.
-    """
-
     async def wrapper(state: ConversationState) -> ConversationState:
-        logger.info("node_started", extra={"event": "node_started", "node_name": node_name})
+        logger.info(
+            "node_started",
+            extra={
+                "event": "node_started",
+                "node_name": node_name,
+                "input": redactor.redact_text(state.message, customer=state.customer)
+            }
+        )
 
         start = time.perf_counter()
 
@@ -38,6 +40,8 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
             )
             raise
 
+        customer = getattr(new_state, "customer", None)
+
         logger.info(
             "node_finished",
             extra={
@@ -45,9 +49,12 @@ def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
                 "node_name": node_name,
                 "duration_ms": elapsed_ms(start),
                 "status": "ok",
-                "reply": new_state.reply,
-                "citations": new_state.citations,
-                "triage_result": new_state.triage_result.model_dump(mode="json") if new_state.triage_result else None,
+                "reply": redactor.redact_text(new_state.reply, customer),
+                "citations": redactor.redact_value(new_state.citations, customer),
+                "triage_result": redactor.redact_value(
+                    new_state.triage_result.model_dump(mode="json") if new_state.triage_result else None,
+                    customer,
+                ),
             },
         )
         return new_state

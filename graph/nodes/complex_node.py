@@ -1,15 +1,10 @@
-from langchain_core.globals import set_debug
-
 from app.config import DEFAULT_AGENT_MODE
 from graph.plan_executor import execute_plan
 from graph.re_act_agent import call_agent
 from mcp_client.client import get_safe_langchain_tools
 from models.agent_mode import AgentMode
-from services.agent_planning_service import create_agent_plan, resolve_from_observations
-
-set_debug(True)
-
 from models.conversation_state import ConversationState
+from services.agent_planning_service import create_agent_plan, resolve_from_observations
 
 
 async def complex_case_node(state: ConversationState) -> ConversationState:

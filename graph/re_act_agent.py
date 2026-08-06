@@ -1,6 +1,3 @@
-from langchain_core.globals import set_debug
-
-set_debug(True)
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, HumanMessage

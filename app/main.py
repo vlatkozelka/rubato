@@ -23,7 +23,8 @@ from routers.approvals import router as approvals_router
 from routers.products import router as products_router
 from services.conversation_service import load_conversation_history, save_conversation_turn
 from services.customer_auth_service import authenticate_customer
-from services.customer_service import get_customer_profile
+from services.customer_service import get_customer_profile, get_customer_by_id
+from services.pii_redactor import PiiRedactor
 from services.staff_auth_service import authenticate_staff
 
 STATIC_DIR = BASE_DIR / "static"
@@ -32,6 +33,8 @@ configure_logging()
 logger = logging.getLogger("rubato.api")
 
 _MESSAGE_PREVIEW_CHARS = 200
+
+redactor = PiiRedactor()
 
 app = FastAPI(
     title="Rubato",
@@ -149,13 +152,17 @@ async def support_message(
     customer_id = principal.customer_id
     if customer_id is None:
         raise HTTPException(status_code=401, detail="Invalid session.")
+    customer = get_customer_by_id(customer_id)
+    if customer is None:
+        raise HTTPException(status_code=401, detail="Invalid session.")
+
     with conversation_context(payload.conversation_id):
         logger.info(
             "request_received",
             extra={
                 "event": "request_received",
                 "customer_id": customer_id,
-                "message_preview": _preview(payload.message),
+                "message_preview": redactor.redact_text(_preview(payload.message),customer),
             },
         )
 
@@ -167,6 +174,7 @@ async def support_message(
                 id=payload.conversation_id,
                 message=payload.message,
                 customer_id=customer_id,
+                customer=customer,
                 history=history,
                 customer_profile=customer_profile,
             )
