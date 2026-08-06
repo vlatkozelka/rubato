@@ -807,6 +807,83 @@ approval from the loop's tool-call history after the fact.
 
 ---
 
+## Model serving: migration from LM Studio to vLLM
+
+**Decision:** Replaced LM Studio with vLLM (self-hosted, WSL2 + CUDA
+13.0, RTX 5070 Ti) as the local inference backend.
+
+**Why:** LM Studio's GUI didn't expose K/V cache quantization control
+or arbitrary llama.cpp flags (confirmed via open LM Studio bug tracker
+issues, not just a config gap on our end), and its llama.cpp-based
+Qwen3 reasoning/tool-call parsing was community-patched and fragile.
+vLLM ships model-specific reasoning/tool-call parser code
+(`--reasoning-parser qwen3`, `--tool-call-parser qwen3_coder`)
+maintained directly by the vLLM/Qwen teams alongside model releases —
+a materially more solid foundation for the agent-loop and structured-
+output work in Phases 9-10.
+
+**Model:** `RedHatAI/Qwen3.5-9B-quantized.w4a16` (W4A16, Red Hat/Neural
+Magic via `llm-compressor`) chosen over raw bf16 (19.3GB weights alone,
+doesn't fit 16GB VRAM) and over GGUF (vLLM's GGUF support is
+deprecated to an out-of-tree plugin, unverified for Qwen3.5's hybrid
+GDN architecture — not worth stacking on top of an already-bleeding-
+edge model/GPU combination).
+
+**KV cache dtype:** left at default (bf16), not fp8. Confirmed open
+vLLM bug (#37554): dynamic FP8 KV cache silently corrupts output on
+Qwen3.5's hybrid GDN+attention architecture (mismatched head dims
+between linear-attention and full-attention layers) — no error thrown,
+just bad output. Revisit only if a validated fix lands upstream.
+
+**Reasoning + structured output collision (the core finding):**
+grammar-constrained JSON (`response_format=json_schema` /
+`instructor`'s `Mode.JSON_SCHEMA`) forces the model into schema-valid
+output from token one, so it never emits `</think>`. vLLM's reasoning
+parser then classifies the entire (correct) output as `reasoning`,
+leaving `content=None` — this is a documented, acknowledged tension in
+vLLM itself, not a bug in our code or schema.
+
+- `triage_node`: fixed by disabling thinking entirely for this call
+  (`chat_template_kwargs: {"enable_thinking": False}`) — correct
+  architecturally regardless, since triage is a fast classification
+  task with no need for reasoning (matches the plan's existing
+  "cheap model for triage" line).
+- `complex_case_node`: **not** disabling thinking here — this is the
+  node that needs it. Works via LangChain's `ToolStrategy`, which
+  extracts structured output through the tool-call parser rather than
+  raw grammar constraint. Qwen3.5+ models legitimately start tool
+  calls inside an open `<think>` block without closing it first
+  (documented parser behavior) — `ToolStrategy` accommodates this by
+  construction, `response_format=json_schema` does not. Verified
+  end-to-end on the canonical "broken zipper" test case: multi-step
+  tool loop, correct approval-queue halt, correct refund policy
+  citation, correct historical-return context.
+
+**`thinking_token_budget`: deliberately not used on `complex_case`.**
+Open vLLM issue (#44676) confirms budget enforcement can force-inject
+the reasoning-end token into the middle of in-progress tool-call
+arguments on Qwen3.5+, corrupting them. Real risk outweighs the
+runaway-reasoning problem it would solve, given tool calls are core to
+this node's job. Candidate for triage-only use later if ever needed,
+since triage has no tool calls.
+
+**Sampling params:** set per-node from Qwen's official recommended
+profiles, not left at defaults — `presence_penalty=1.5` in particular
+is a documented, deliberate countermeasure to Qwen3.5's known
+repetition/looping tendency, which we reproduced live (~6,900-token
+spiral on a trivial 5-word constraint prompt). Split across
+`ChatOpenAI` top-level kwargs (temperature/top_p/presence_penalty) and
+`model_kwargs.extra_body` (top_k/min_p/repetition_penalty — vLLM
+extensions, not standard OpenAI fields).
+
+**Known open issue, not fixed:** refund/approval resolution is not yet
+consistently accurate across runs — same class of problem already
+flagged in the Phase 10 handoff (`resolve_from_observations`
+occasionally narrating unbacked actions). `ToolStrategy` appears to
+help but does not fully resolve it. Deliberately not chased further
+now — this is exactly what Phase 12 evals exists to quantify, not
+something to hand-tune against a handful of manual tests.
+
 
 ## Open questions to answer as later phases land
 

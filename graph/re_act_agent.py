@@ -66,7 +66,16 @@ _model = ChatOpenAI(
     base_url=LLM_BASE_URL,
     api_key=LLM_API_KEY,
     model=LLM_MODEL,
-    max_tokens=1024,
+    temperature=1.0,
+    top_p=0.95,
+    presence_penalty=1.5,
+    model_kwargs={
+        "extra_body": {
+            "top_k": 20,
+            "min_p": 0.0,
+            "repetition_penalty": 1.0,
+        }
+    }
 )
 
 

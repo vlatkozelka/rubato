@@ -84,8 +84,8 @@ the customer's actual tone (neutral, frustrated, angry) — never let intent
 classification influence the sentiment field.
 """.strip()
 
-
 from models.turn import Turn
+
 
 async def triage_message(message: str, history: list[Turn] | None = None) -> TriageResult:
     history_messages = [
@@ -103,4 +103,13 @@ async def triage_message(message: str, history: list[Turn] | None = None) -> Tri
                 *history_messages,
                 {"role": "user", "content": message},
             ],
+            extra_body={
+                "chat_template_kwargs": {"enable_thinking": False},
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 20,
+                "min_p": 0.0,
+                "presence_penalty": 1.5,
+                "repetition_penalty": 1.0,
+            },
         )
