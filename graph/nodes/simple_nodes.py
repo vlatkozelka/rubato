@@ -10,8 +10,8 @@ from models.order_item import OrderItem
 from models.order_status import ShippedStatus, DeliveredStatus, CancelledStatus, ProcessingStatus
 from models.policy_answer import PolicyAnswer
 from models.product import Product
-from models.triage_result import TriageResult
 from services.customer_service import increment_refund_request_count
+from services.triage_service import triage_message
 
 logger = logging.getLogger("rubato.nodes")
 
@@ -23,11 +23,11 @@ async def _get_order(order_id: str) -> Optional[Order]:
 
 
 async def triage_node(state: ConversationState) -> ConversationState:
-    result = await call_tool("triage_message_tool", {
-        "message": state.message,
-        "history": [t.model_dump(mode="json") for t in state.history],
-    })
-    state.triage_result = TriageResult.model_validate(result.structuredContent)
+    result = await triage_message(
+        message=state.message,
+        history=state.history
+    )
+    state.triage_result = result
     return state
 
 
@@ -97,62 +97,6 @@ async def check_price_node(state: ConversationState) -> ConversationState:
         return state
 
     state.reply = format_price_matches(products)
-    return state
-
-
-async def answer_policy_question_node(state: ConversationState) -> ConversationState:
-    triage_result = state.triage_result
-    if triage_result is None:
-        raise ValueError("performing check_price on a conversation state with triage_result None")
-    else:
-        result = await call_tool("answer_policy_question_tool", {"question": state.message, "top_k": 2})
-        policy_answer = PolicyAnswer.model_validate(result.structuredContent)
-        state.reply = policy_answer.answer
-        state.citations = policy_answer.cited_sources or None
-        return state
-
-
-async def refund_request_node(state: ConversationState) -> ConversationState:
-    triage_result = state.triage_result
-    if triage_result is None:
-        raise ValueError("performing refund_request_node on a conversation state with triage_result None")
-
-    order_id = triage_result.order_id
-    if order_id is None:
-        state.reply = "Sure, which order would you like refunded?"
-        return state
-
-    order = await _get_order(order_id)
-
-    approval = None
-    if order is not None and order.items and state.customer_id is not None:
-        product_id = order.items[0].product_id
-        with log_duration(logger, "refund_check_finished", order_id=order_id):
-            check_result = await call_tool("check_refund_tool", {
-                "order_id": order_id,
-                "product_id": product_id,
-                "customer_id": state.customer_id,
-                "reason": state.message,
-            })
-        approval_data = check_result.structuredContent["result"]
-        approval = Approval.model_validate(approval_data) if approval_data else None
-
-    if approval is None:
-        logger.warning("refund_request_rejected", extra={"event": "refund_request_rejected", "order_id": order_id})
-        state.reply = "I couldn't process a refund for that order."
-        return state
-
-    create_result = await call_tool("create_approval_tool", {
-        "payload": approval.payload.model_dump(mode="json"),
-    })
-
-    approval = Approval.model_validate(create_result.structuredContent)
-    await increment_refund_request_count(state.customer_id)
-
-    if approval.payload.status == ApprovalStatus.DENIED:
-        state.reply = f"I'm sorry, I can't approve this refund: {approval.payload.reason}"
-    else:
-        state.reply = "Your refund request has been submitted and is pending review by our team."
     return state
 
 

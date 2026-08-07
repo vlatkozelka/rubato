@@ -6,6 +6,7 @@ from typing import Optional
 from models.approval import Approval, ApprovalPayload, ApprovalStatus, ApprovalType
 from models.order import Order
 from models.order_status import DeliveredStatus
+from services import retrieval_service
 from services.order_service import get_order_by_id
 from services.policy_service import get_refund_policy
 from services.product_service import get_product_by_id
@@ -42,7 +43,9 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
                     delivered_at = datetime.fromisoformat(order.status.delivered_at)
                     elapsed = datetime.now() - delivered_at
                     days_since_delivery = elapsed.days
-                    refund_policy = await get_refund_policy(category)
+                    excerpts = await retrieval_service.retrieve_policy_excerpts(
+                        f"what is the refund policy for items of category: {category}")
+                    refund_policy = await get_refund_policy(category, excerpts)
                     if refund_policy.allowed_duration > days_since_delivery:
                         return Approval(
                             id=uuid.uuid4(),

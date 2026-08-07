@@ -1,12 +1,12 @@
 from mcp_server.instance import mcp
-from models.policy_answer import PolicyAnswer
-from services.policy_service import answer_policy_question
+from services.retrieval_service import retrieve_policy_excerpts
 
 
 @mcp.tool()
-async def answer_policy_question_tool(question: str, top_k: int = 3) -> PolicyAnswer:
+async def retrieve_policy_excerpts_tool(question: str, top_k: int = 3) -> str:
     """
-    Answer a customer policy question (returns, shipping, warranty) using
-    retrieved policy document excerpts, grounded to those excerpts only.
+    Retrieve ranked policy document excerpts relevant to a customer question
+    (returns, shipping, warranty), via hybrid search and reranking. Returns
+    raw excerpts with their source — does not synthesize an answer.
     """
-    return await answer_policy_question(question, top_k)
+    return await retrieve_policy_excerpts(question, top_k)
