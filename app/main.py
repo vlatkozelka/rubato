@@ -1,4 +1,9 @@
+from dotenv import load_dotenv
+
+load_dotenv()
 import logging
+#logging.getLogger("opentelemetry.exporter.otlp.proto.http.trace_exporter").setLevel(logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
@@ -8,6 +13,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
+from langfuse import get_client, propagate_attributes
 
 from app.auth import require_customer
 from app.config import BASE_DIR, JWT_ACCESS_TOKEN_EXPIRE_MINUTES, LLM_BASE_URL, LLM_MODEL
@@ -181,9 +187,14 @@ async def support_message(
                 customer_profile=customer_profile,
             )
 
-            raw_result = await app_graph.ainvoke(input=state,
-                                                 config=RunnableConfig(configurable={"agent_mode": AgentMode.PLAN})
-                                                 )
+            langfuse_client = get_client()
+
+            with langfuse_client.start_as_current_observation(as_type="span", name="support_message") as root:
+                with propagate_attributes(session_id=payload.conversation_id):
+                    raw_result = await app_graph.ainvoke(input=state,
+                                                         config=RunnableConfig(
+                                                             configurable={"agent_mode": AgentMode.PLAN})
+                                                         )
             result_state = ConversationState.model_validate(raw_result)
 
             response = _build_support_response(payload.conversation_id, result_state)

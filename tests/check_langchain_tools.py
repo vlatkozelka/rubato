@@ -22,6 +22,10 @@ async def main():
         }
     )
 
+    import inspect
+    from mcp import ClientSession
+    print(inspect.signature(ClientSession.call_tool))
+
     tools = await client.get_tools()
     print("=== Tool names ===")
     print(", ".join(t.name for t in tools))

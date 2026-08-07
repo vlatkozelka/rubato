@@ -63,10 +63,10 @@ When you're done, produce:
   and note any action tool you called.
 - citations: policy doc sources you relied on, if any."""
 
-_model = get_chat_model("qwen3_thinking")
 
 
 def _build_agent(customer_id: str, tools):
+    _model = get_chat_model("qwen3_thinking")
     return create_agent(
         model=_model,
         tools=tools,

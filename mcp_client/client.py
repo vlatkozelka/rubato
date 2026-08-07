@@ -2,6 +2,8 @@ import os
 
 from langchain_core.tools import StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from opentelemetry import context
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8001/mcp")
 MCP_SERVER_NAME = "rubato-tools"
@@ -16,6 +18,14 @@ client = MultiServerMCPClient(
     }
 )
 
+_propagator = TraceContextTextMapPropagator()
+
+
+def _inject_trace_context() -> dict:
+    carrier = {}
+    _propagator.inject(carrier, context=context.get_current())
+    return carrier
+
 
 async def call_tool(tool_name: str, arguments: dict):
     """
@@ -25,7 +35,11 @@ async def call_tool(tool_name: str, arguments: dict):
     the library's default and this server's lack of cross-call state.
     """
     async with client.session(MCP_SERVER_NAME) as session:
-        return await session.call_tool(tool_name, arguments)
+        return await session.call_tool(
+            tool_name,
+            arguments,
+            meta=_inject_trace_context(),
+        )
 
 async def get_langchain_tools():
     return await client.get_tools()
