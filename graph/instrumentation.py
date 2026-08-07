@@ -15,55 +15,42 @@ redactor = PiiRedactor()
 NodeFn = Callable[[ConversationState], Awaitable[ConversationState]]
 
 
+def _preview(text: str | None, limit: int = 120) -> str:
+    if not text:
+        return ""
+    text = text.replace("\n", " ")
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
     wants_config = "config" in inspect.signature(node_fn).parameters
+
     async def wrapper(state: ConversationState, config: RunnableConfig) -> ConversationState:
-        logger.info(
-            "node_started",
-            extra={
-                "event": "node_started",
-                "node_name": node_name,
-                "input": redactor.redact_text(state.message, customer=state.customer)
-            }
-        )
+        log = logging.LoggerAdapter(logger, {"tag": node_name})
+        input_preview = _preview(redactor.redact_text(state.message, customer=state.customer))
+        log.info(f"started — input: {input_preview}")
 
         start = time.perf_counter()
-
         try:
-            if wants_config:
-                new_state = await node_fn(state, config)
-            else:
-                new_state = await node_fn(state)
+            new_state = await (node_fn(state, config) if wants_config else node_fn(state))
         except Exception:
-            logger.error(
-                "node_finished",
-                extra={
-                    "event": "node_finished",
-                    "node_name": node_name,
-                    "duration_ms": elapsed_ms(start),
-                    "status": "error",
-                },
-                exc_info=True,
-            )
+            log.error(f"failed after {elapsed_ms(start)}ms", exc_info=True)
             raise
 
         customer = getattr(new_state, "customer", None)
+        reply = _preview(redactor.redact_text(new_state.reply, customer))
+        intent = new_state.triage_result.intent if new_state.triage_result else None
+        citations = redactor.redact_value(new_state.citations, customer) or []
 
-        logger.info(
-            "node_finished",
-            extra={
-                "event": "node_finished",
-                "node_name": node_name,
-                "duration_ms": elapsed_ms(start),
-                "status": "ok",
-                "reply": redactor.redact_text(new_state.reply, customer),
-                "citations": redactor.redact_value(new_state.citations, customer),
-                "triage_result": redactor.redact_value(
-                    new_state.triage_result.model_dump(mode="json") if new_state.triage_result else None,
-                    customer,
-                ),
-            },
-        )
+        summary = f"finished in {elapsed_ms(start)}ms"
+        if intent:
+            summary += f" — intent={intent}"
+        if reply:
+            summary += f" — reply: {reply}"
+        if citations:
+            summary += f" — citations={citations}"
+        log.info(summary)
+
         return new_state
 
     wrapper.__name__ = f"instrumented_{node_name}"

@@ -1,17 +1,13 @@
-from langchain_core.globals import set_debug
-
-from graph.graph_utils import extract_observations, build_tool_registry
-from services.llm_factory import get_chat_model
-
-set_debug(True)
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
+from graph.graph_utils import extract_observations, build_tool_registry
 from mcp_client.client import get_safe_langchain_tools
 from models.conversation_state import ConversationState
 from models.decisions import ComplexCaseResolution
+from services.llm_factory import get_chat_model
 
 SYSTEM_PROMPT = """
 You are resolving a complex customer support case that
