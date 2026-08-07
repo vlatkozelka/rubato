@@ -12,6 +12,16 @@ from services.embedding_service import embed_text
 logger = logging.getLogger("rubato.services.retrieval")
 
 
+async def _create_excerpts(query: str, top_k: int) -> str:
+    chunks = await retrieve_chunks(query, top_k=top_k)
+
+    excerpts = "\n\n".join(
+        f"[{c.source}#{c.text.splitlines()[0].lstrip('# ').strip()}]\n{c.text}"
+        for c in chunks
+    )
+    return excerpts
+
+
 async def retrieve_chunks(query: str, top_k: int = 3, strategy: str = "section_aware") -> list[Chunk]:
     conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     await register_vector_async(conn)
@@ -21,7 +31,7 @@ async def retrieve_chunks(query: str, top_k: int = 3, strategy: str = "section_a
         query_vector = await asyncio.to_thread(embed_text, query)
 
     with log_duration(logger, "db_query_finished", service="retrieval_service", function="retrieve_chunks",
-                       strategy=strategy, top_k=top_k):
+                      strategy=strategy, top_k=top_k):
         await cur.execute(
             """
             SELECT text, source, chunk_index, strategy
@@ -41,3 +51,7 @@ async def retrieve_chunks(query: str, top_k: int = 3, strategy: str = "section_a
         Chunk(text=text, source=source, chunk_index=chunk_index, strategy=strategy)
         for text, source, chunk_index, strategy in rows
     ]
+
+
+async def retrieve_policy_excerpts(query: str, top_k: int = 3) -> str:
+    return await _create_excerpts(query, top_k)

@@ -182,7 +182,7 @@ async def support_message(
             )
 
             raw_result = await app_graph.ainvoke(input=state,
-                                                 config=RunnableConfig(configurable={"agent_mode": AgentMode.RE_ACT})
+                                                 config=RunnableConfig(configurable={"agent_mode": AgentMode.PLAN})
                                                  )
             result_state = ConversationState.model_validate(raw_result)
 

@@ -5,26 +5,12 @@ from app.timing import log_duration
 from models.policy_answer import PolicyAnswer
 from models.refund_policy import RefundPolicy
 from services.llm_factory import get_async_instructor_client
-from services.retrieval_service import retrieve_chunks
 
 logger = logging.getLogger("rubato.services.policy_qa")
 
-client = get_async_instructor_client("qwen3_non_thinking")
+async def answer_policy_question(question: str, excerpts: str) -> PolicyAnswer:
 
-
-async def _create_excerpts(query: str, top_k: int) -> str:
-    chunks = await retrieve_chunks(query, top_k=top_k)
-
-    excerpts = "\n\n".join(
-        f"[{c.source}#{c.text.splitlines()[0].lstrip('# ').strip()}]\n{c.text}"
-        for c in chunks
-    )
-
-    return excerpts
-
-
-async def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
-    excerpts = await _create_excerpts(question, top_k)
+    client = get_async_instructor_client("qwen3_non_thinking")
 
     prompt = """
     You are a policy assistant for an e-commerce store. Answer the customer's
@@ -73,10 +59,9 @@ async def answer_policy_question(question: str, top_k: int = 3) -> PolicyAnswer:
         )
 
 
-async def get_refund_policy(category: str) -> RefundPolicy:
+async def get_refund_policy(category: str, excerpts: str) -> RefundPolicy:
+    client = get_async_instructor_client("qwen3_non_thinking")
     question = f"return refund request for {category} items"
-    excerpts = await _create_excerpts(question, 3)
-
     prompt = f"""
     You are a policy lookup assistant for an e-commerce support system.
 
