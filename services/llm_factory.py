@@ -1,4 +1,5 @@
 from functools import lru_cache
+import logging
 import instructor
 from litellm import completion, acompletion
 from langchain_litellm import ChatLiteLLM
@@ -11,8 +12,13 @@ from langfuse import get_client
 litellm.success_callback = ["langfuse_otel"]
 litellm.failure_callback = ["langfuse_otel"]
 
-import os
-print(">>> OTEL_EXPORTER_OTLP_HEADERS at factory import:", os.environ.get("OTEL_EXPORTER_OTLP_HEADERS"))
+# litellm's OTel integration also tries to write gen_ai.* attributes onto
+# whatever span was active when a call finishes, as a fire-and-forget
+# background task — by the time it runs, our per-node span (see
+# graph/instrumentation.py) has usually already closed. That write is
+# harmless noise: the readable input/output we actually rely on is set
+# synchronously via the generation span below, before it closes.
+logging.getLogger("opentelemetry.sdk.trace").setLevel(logging.ERROR)
 
 
 def _require_active_trace():
@@ -31,19 +37,28 @@ def get_instructor_client(profile_name: str):
 
     def create(**kwargs):
         # _require_active_trace()
-        return client.chat.completions.create(
+        langfuse = get_client()
+        with langfuse.start_as_current_observation(
+            as_type="generation",
+            name=f"llm:{profile_name}",
             model=profile.model,
-            api_base=profile.api_base,
-            temperature=profile.temperature,
-            max_tokens=profile.max_tokens,
-            top_p=profile.top_p,
-            top_k=profile.top_k,
-            min_p=profile.min_p,
-            presence_penalty=profile.presence_penalty,
-            repetition_penalty=profile.repetition_penalty,
-            chat_template_kwargs=profile.chat_template_kwargs,
-            **kwargs,
-        )
+            input=kwargs.get("messages"),
+        ) as generation:
+            result = client.chat.completions.create(
+                model=profile.model,
+                api_base=profile.api_base,
+                temperature=profile.temperature,
+                max_tokens=profile.max_tokens,
+                top_p=profile.top_p,
+                top_k=profile.top_k,
+                min_p=profile.min_p,
+                presence_penalty=profile.presence_penalty,
+                repetition_penalty=profile.repetition_penalty,
+                chat_template_kwargs=profile.chat_template_kwargs,
+                **kwargs,
+            )
+            generation.update(output=result)
+        return result
 
     return create
 
@@ -75,18 +90,27 @@ def get_async_instructor_client(profile_name: str):
 
     async def create(**kwargs):
         # _require_active_trace()
-        return await client.chat.completions.create(
+        langfuse = get_client()
+        with langfuse.start_as_current_observation(
+            as_type="generation",
+            name=f"llm:{profile_name}",
             model=profile.model,
-            api_base=profile.api_base,
-            temperature=profile.temperature,
-            max_tokens=profile.max_tokens,
-            top_p=profile.top_p,
-            top_k=profile.top_k,
-            min_p=profile.min_p,
-            presence_penalty=profile.presence_penalty,
-            repetition_penalty=profile.repetition_penalty,
-            chat_template_kwargs=profile.chat_template_kwargs,
-            **kwargs,
-        )
+            input=kwargs.get("messages"),
+        ) as generation:
+            result = await client.chat.completions.create(
+                model=profile.model,
+                api_base=profile.api_base,
+                temperature=profile.temperature,
+                max_tokens=profile.max_tokens,
+                top_p=profile.top_p,
+                top_k=profile.top_k,
+                min_p=profile.min_p,
+                presence_penalty=profile.presence_penalty,
+                repetition_penalty=profile.repetition_penalty,
+                chat_template_kwargs=profile.chat_template_kwargs,
+                **kwargs,
+            )
+            generation.update(output=result)
+        return result
 
     return create

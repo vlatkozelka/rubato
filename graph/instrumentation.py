@@ -4,6 +4,7 @@ import time
 from typing import Awaitable, Callable
 
 from langchain_core.runnables import RunnableConfig
+from langfuse import observe
 
 from app.timing import elapsed_ms
 from models.conversation_state import ConversationState
@@ -21,10 +22,10 @@ def _preview(text: str | None, limit: int = 120) -> str:
     text = text.replace("\n", " ")
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
-
 def instrumented_node(node_name: str, node_fn: NodeFn) -> NodeFn:
     wants_config = "config" in inspect.signature(node_fn).parameters
 
+    @observe(name=node_name, as_type="span")
     async def wrapper(state: ConversationState, config: RunnableConfig) -> ConversationState:
         log = logging.LoggerAdapter(logger, {"tag": node_name})
         input_preview = _preview(redactor.redact_text(state.message, customer=state.customer))
