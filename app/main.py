@@ -2,10 +2,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 import logging
-logging.getLogger("opentelemetry.exporter.otlp.proto.http.trace_exporter").setLevel(logging.DEBUG)
-logging.basicConfig(level=logging.DEBUG)
-import litellm
-litellm._turn_on_debug()
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
