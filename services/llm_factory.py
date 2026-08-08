@@ -81,7 +81,7 @@ def get_agent_client(profile: LLMProfile):
 
 @lru_cache(maxsize=None)
 def get_async_instructor_client(llm_profile: LLMProfile):
-    client = instructor.from_litellm(acompletion, mode=Mode.JSON_SCHEMA)
+    client = instructor.from_litellm(acompletion, mode=Mode.JSON)
 
     async def create(response_model: BaseModel, messages: List[BaseMessage], prompt: Optional[PromptClient] = None, max_retries: int = 3):
         # _require_active_trace()
