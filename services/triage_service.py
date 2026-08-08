@@ -1,6 +1,7 @@
 import logging
 
 from app.timing import log_duration
+from models.llm_profile import default_non_thinking_model
 from models.triage_result import TriageResult
 from services.llm_factory import get_async_instructor_client
 from langfuse import get_client as get_langfuse_client
@@ -14,7 +15,7 @@ async def triage_message(message: str, history: list[Turn] | None = None) -> Tri
     langfuse_client = get_langfuse_client()
     langfuse_prompt = langfuse_client.get_prompt("triage")
     system_prompt = langfuse_prompt.compile()
-    llm_client = get_async_instructor_client(profile_name="qwen3_non_thinking")
+    llm_client = get_async_instructor_client(default_non_thinking_model)
 
     history_messages = [
         {"role": "user" if t.role == "user" else "assistant", "content": t.content}

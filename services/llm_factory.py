@@ -4,6 +4,7 @@ from typing import Optional, List
 
 import instructor
 import litellm
+from instructor import Mode
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import BaseMessage
@@ -13,8 +14,9 @@ from langchain_litellm import ChatLiteLLM
 from langfuse import get_client
 from langfuse.model import PromptClient
 from litellm import acompletion
+from pydantic import BaseModel
 
-from models.llm_profile import PROFILES
+from models.llm_profile import LLMProfile
 
 litellm.success_callback = ["langfuse_otel"]
 litellm.failure_callback = ["langfuse_otel"]
@@ -38,9 +40,8 @@ def _require_active_trace():
 
 
 @lru_cache(maxsize=None)
-def get_agent_client(profile_name: str):
+def get_agent_client(profile: LLMProfile):
     # _require_active_trace()
-    profile = PROFILES[profile_name]
 
     async def ainvoke(messages: List[BaseMessage],
                       tools: List[BaseTool],
@@ -50,7 +51,7 @@ def get_agent_client(profile_name: str):
         langfuse = get_client()
         with langfuse.start_as_current_observation(
                 as_type="generation",
-                name=f"llm:{profile_name}",
+                name=profile.name,
                 model=profile.model,
                 input=messages,
                 prompt=prompt
@@ -60,14 +61,8 @@ def get_agent_client(profile_name: str):
                 api_base=profile.api_base,
                 temperature=profile.temperature,
                 max_tokens=profile.max_tokens,
-                model_kwargs={
-                    "top_p": profile.top_p,
-                    "top_k": profile.top_k,
-                    "min_p": profile.min_p,
-                    "presence_penalty": profile.presence_penalty,
-                    "repetition_penalty": profile.repetition_penalty,
-                    "chat_template_kwargs": profile.chat_template_kwargs,
-                },
+                api_key=profile.api_key,
+                model_kwargs=profile.to_request_kwargs(),
             )
             agent = create_agent(
                 model=model,
@@ -76,8 +71,8 @@ def get_agent_client(profile_name: str):
                 response_format=tool_strategy,
             )
             result = await agent.ainvoke({"messages": messages},
-                                   config=RunnableConfig(recursion_limit=15),
-                                   )
+                                         config=RunnableConfig(recursion_limit=15),
+                                         )
             generation.update(output=result)
         return result
 
@@ -85,32 +80,24 @@ def get_agent_client(profile_name: str):
 
 
 @lru_cache(maxsize=None)
-def get_async_instructor_client(profile_name: str):
-    profile = PROFILES[profile_name]
-    client = instructor.from_litellm(acompletion)
+def get_async_instructor_client(llm_profile: LLMProfile):
+    client = instructor.from_litellm(acompletion, mode=Mode.JSON_SCHEMA)
 
-    async def create(prompt: Optional[PromptClient] = None, **kwargs):
+    async def create(response_model: BaseModel, messages: List[BaseMessage], prompt: Optional[PromptClient] = None, max_retries: int = 3):
         # _require_active_trace()
         langfuse = get_client()
         with langfuse.start_as_current_observation(
                 as_type="generation",
-                name=f"llm:{profile_name}",
-                model=profile.model,
-                input=kwargs.get("messages"),
+                name=llm_profile.name,
+                model=llm_profile.model,
+                input=messages,
                 prompt=prompt
         ) as generation:
             result = await client.chat.completions.create(
-                model=profile.model,
-                api_base=profile.api_base,
-                temperature=profile.temperature,
-                max_tokens=profile.max_tokens,
-                top_p=profile.top_p,
-                top_k=profile.top_k,
-                min_p=profile.min_p,
-                presence_penalty=profile.presence_penalty,
-                repetition_penalty=profile.repetition_penalty,
-                chat_template_kwargs=profile.chat_template_kwargs,
-                **kwargs,
+                response_model=response_model,
+                messages = messages,
+                max_retries = max_retries,
+                **llm_profile.to_request_kwargs()
             )
             generation.update(output=result)
         return result

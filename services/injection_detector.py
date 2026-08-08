@@ -3,6 +3,7 @@ import re
 from typing import Optional
 
 from models.injection import InjectionCheckResult, InjectionSource, InjectionClassification
+from models.llm_profile import default_non_thinking_model
 from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class InjectionDetector:
             (re.compile(pattern, re.IGNORECASE), reason)
             for pattern, reason in HEURISTIC_PATTERNS
         ]
-        self.client = get_async_instructor_client("qwen3_non_thinking")
+        self.client = get_async_instructor_client(default_non_thinking_model)
 
     def check_heuristics(self, message: str) -> Optional[str]:
         for pattern, reason in self._compiled:

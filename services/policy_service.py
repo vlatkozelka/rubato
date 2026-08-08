@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from app.timing import log_duration
+from models.llm_profile import default_non_thinking_model
 from models.policy_answer import PolicyAnswer
 from models.refund_policy import RefundPolicy
 from services.llm_factory import get_async_instructor_client
@@ -14,7 +15,7 @@ async def answer_policy_question(question: str, excerpts: str) -> PolicyAnswer:
     langfuse_client = get_langfuse_client()
     langfuse_prompt = langfuse_client.get_prompt("policy/generic_policy_question")
     sys_prompt = langfuse_prompt.compile()
-    client = get_async_instructor_client("qwen3_non_thinking")
+    client = get_async_instructor_client(default_non_thinking_model)
 
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="answer_policy_question"):
         return await client(
@@ -33,7 +34,7 @@ async def get_refund_policy(category: str, excerpts: str) -> RefundPolicy:
     langfuse_prompt = langfuse_client.get_prompt("policy/generic_policy_question")
     sys_prompt = langfuse_prompt.compile(category=category)
 
-    client = get_async_instructor_client("qwen3_non_thinking")
+    client = get_async_instructor_client(default_non_thinking_model)
     question = f"return refund request for {category} items"
     with log_duration(logger, "llm_call_finished", service="policy_qa_service", function="get_refund_policy"):
         try:

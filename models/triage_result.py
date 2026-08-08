@@ -9,3 +9,4 @@ class TriageResult(BaseModel):
     order_id: Optional[str] = None
     product_reference: Optional[str] = None
     sentiment: Literal["neutral", "frustrated", "angry"] = "neutral"
+    reasoning: str

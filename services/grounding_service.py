@@ -3,11 +3,12 @@ import logging
 from models.agent_observation import AgentObservation
 from models.decisions import ComplexCaseResolution
 from models.grounding_verdict import GroundingVerdict
+from models.llm_profile import default_non_thinking_model
 from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger(__name__)
 
-client = get_async_instructor_client("qwen3_non_thinking")
+client = get_async_instructor_client(default_non_thinking_model)
 
 
 def _format_observations(observations: list[AgentObservation]) -> str:

@@ -5,12 +5,13 @@ from langchain_core.tools import BaseTool
 from models.agent_observation import AgentObservation
 from models.conversation_state import ConversationState
 from models.decisions import ComplexCaseResolution
+from models.llm_profile import default_non_thinking_model, default_thinking_model
 from models.plan import Plan
 from services.llm_factory import get_async_instructor_client
 
 
 async def create_agent_plan(conversation_state: ConversationState, tools: List[BaseTool]) -> Plan:
-    client = get_async_instructor_client("qwen3_non_thinking")
+    client = get_async_instructor_client(default_thinking_model)
 
     tool_descriptions = "\n".join(
         f"- {t.name}: {t.description}" for t in tools
@@ -40,7 +41,7 @@ Limit steps to 20 maximum. Aim for minimizing the number of steps
 
 
 async def resolve_from_observations(state: ConversationState, observations: list[AgentObservation]) -> ComplexCaseResolution:
-    client = get_async_instructor_client("qwen3_non_thinking")
+    client = get_async_instructor_client(default_non_thinking_model)
 
     obs_text = "\n".join(
         f"Step {o.step_id} ({o.tool}): {o.result}"

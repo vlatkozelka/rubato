@@ -6,6 +6,7 @@ from typing import List
 import psycopg
 
 from app.config import POSTGRES_DSN
+from models.llm_profile import default_non_thinking_model
 from models.turn import Turn
 from services.llm_factory import get_async_instructor_client
 
@@ -64,7 +65,7 @@ async def save_conversation_turn(
 HISTORY_TOKEN_BUDGET = 3000  # rough char/4 estimate, not exact tokenization
 KEEP_VERBATIM_TURNS = 6
 
-plain_client = get_async_instructor_client("qwen3_non_thinking")
+plain_client = get_async_instructor_client(default_non_thinking_model)
 
 
 def _estimate_tokens(turns: list[Turn]) -> int:

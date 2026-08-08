@@ -3,6 +3,7 @@ import json
 from langchain_core.tools import BaseTool
 
 from graph.graph_utils import stringify_result
+from models.llm_profile import default_non_thinking_model
 from models.plan import Plan, PlanStepArgs
 from services.llm_factory import get_async_instructor_client
 
@@ -11,7 +12,7 @@ async def execute_plan(plan: Plan, tools: list[BaseTool], customer_id: str, conv
     tools_by_name = {t.name: t for t in tools}
     observations = []
 
-    client=get_async_instructor_client("qwen3_non_thinking")
+    client=get_async_instructor_client(default_non_thinking_model)
 
     for step in plan.steps:
         if step.tool_hint is None or step.tool_hint not in tools_by_name:
