@@ -1,23 +1,20 @@
-from dataclasses import Field
-from functools import lru_cache
 import logging
+from functools import lru_cache
 from typing import Optional, List
 
 import instructor
+import litellm
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
-from langfuse.model import PromptClient
-from litellm import completion, acompletion
 from langchain_litellm import ChatLiteLLM
-from typer import Argument
+from langfuse import get_client
+from langfuse.model import PromptClient
+from litellm import acompletion
 
 from models.llm_profile import PROFILES
-
-import litellm
-from langfuse import get_client
 
 litellm.success_callback = ["langfuse_otel"]
 litellm.failure_callback = ["langfuse_otel"]
