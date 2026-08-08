@@ -2,8 +2,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 import logging
-#logging.getLogger("opentelemetry.exporter.otlp.proto.http.trace_exporter").setLevel(logging.DEBUG)
-#logging.basicConfig(level=logging.DEBUG)
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import uuid4
@@ -190,23 +188,24 @@ async def support_message(
             langfuse_client = get_client()
 
             with langfuse_client.start_as_current_observation(as_type="span", name="support_message") as root:
+                root.update(input=payload.message)
                 with propagate_attributes(session_id=payload.conversation_id):
                     raw_result = await app_graph.ainvoke(input=state,
                                                          config=RunnableConfig(
                                                              configurable={"agent_mode": AgentMode.PLAN})
                                                          )
-            result_state = ConversationState.model_validate(raw_result)
+                    result_state = ConversationState.model_validate(raw_result)
+                    response = _build_support_response(payload.conversation_id, result_state)
+                    root.update(output=response)
 
-            response = _build_support_response(payload.conversation_id, result_state)
+                    await save_conversation_turn(
+                        conversation_id=payload.conversation_id,
+                        customer_id=customer_id,
+                        user_message=payload.message,
+                        assistant_message=response.reply,
+                    )
 
-            await save_conversation_turn(
-                conversation_id=payload.conversation_id,
-                customer_id=customer_id,
-                user_message=payload.message,
-                assistant_message=response.reply,
-            )
-
-        return response
+                    return response
 
 
 if __name__ == "__main__":
