@@ -4,8 +4,10 @@ from datetime import datetime, timezone
 from typing import List
 
 import psycopg
+from langfuse import get_client as get_langfuse_client
 
 from app.config import POSTGRES_DSN
+from models.llm_profile import default_non_thinking_model
 from models.turn import Turn
 from services.llm_factory import get_async_instructor_client
 
@@ -64,7 +66,7 @@ async def save_conversation_turn(
 HISTORY_TOKEN_BUDGET = 3000  # rough char/4 estimate, not exact tokenization
 KEEP_VERBATIM_TURNS = 6
 
-plain_client = get_async_instructor_client("qwen3_non_thinking")
+plain_client = get_async_instructor_client(default_non_thinking_model)
 
 
 def _estimate_tokens(turns: list[Turn]) -> int:
@@ -74,16 +76,15 @@ def _estimate_tokens(turns: list[Turn]) -> int:
 
 async def _summarize_turns(turns: list[Turn]) -> Turn:
     transcript = "\n".join(f"{t.role}: {t.content}" for t in turns)
+
+    langfuse_client = get_langfuse_client()
+    langfuse_prompt = langfuse_client.get_prompt("conversation/summarize_turns")
+    system_prompt = langfuse_prompt.compile()
+
     response = await plain_client(
+        prompt=langfuse_prompt,
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Summarize this customer support exchange in 2-4 sentences. "
-                    "Preserve concrete facts: order IDs, decisions made, amounts, "
-                    "and outcomes. Drop pleasantries and small talk."
-                ),
-            },
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": transcript},
         ],
     )

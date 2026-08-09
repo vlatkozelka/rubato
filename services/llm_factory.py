@@ -1,13 +1,22 @@
-from functools import lru_cache
 import logging
+from functools import lru_cache
+from typing import Optional, List
+
 import instructor
-from litellm import completion, acompletion
-from langchain_litellm import ChatLiteLLM
-
-from models.llm_profile import PROFILES
-
 import litellm
+from instructor import Mode
+from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
+from langchain_litellm import ChatLiteLLM
 from langfuse import get_client
+from langfuse.model import PromptClient
+from litellm import acompletion
+from pydantic import BaseModel
+
+from models.llm_profile import LLMProfile
 
 litellm.success_callback = ["langfuse_otel"]
 litellm.failure_callback = ["langfuse_otel"]
@@ -31,84 +40,64 @@ def _require_active_trace():
 
 
 @lru_cache(maxsize=None)
-def get_instructor_client(profile_name: str):
-    profile = PROFILES[profile_name]
-    client = instructor.from_litellm(completion)
+def get_agent_client(profile: LLMProfile):
+    # _require_active_trace()
 
-    def create(**kwargs):
-        # _require_active_trace()
+    async def ainvoke(messages: List[BaseMessage],
+                      tools: List[BaseTool],
+                      system_prompt: str,
+                      tool_strategy: ToolStrategy,
+                      prompt: Optional[PromptClient] = None):
         langfuse = get_client()
         with langfuse.start_as_current_observation(
-            as_type="generation",
-            name=f"llm:{profile_name}",
-            model=profile.model,
-            input=kwargs.get("messages"),
+                as_type="generation",
+                name=profile.name,
+                model=profile.model,
+                input=messages,
+                prompt=prompt
         ) as generation:
-            result = client.chat.completions.create(
+            model = ChatLiteLLM(
                 model=profile.model,
                 api_base=profile.api_base,
                 temperature=profile.temperature,
                 max_tokens=profile.max_tokens,
-                top_p=profile.top_p,
-                top_k=profile.top_k,
-                min_p=profile.min_p,
-                presence_penalty=profile.presence_penalty,
-                repetition_penalty=profile.repetition_penalty,
-                chat_template_kwargs=profile.chat_template_kwargs,
-                **kwargs,
+                api_key=profile.api_key,
+                model_kwargs=profile.to_request_kwargs(),
             )
+            agent = create_agent(
+                model=model,
+                tools=tools,
+                system_prompt=system_prompt,
+                response_format=tool_strategy,
+            )
+            result = await agent.ainvoke({"messages": messages},
+                                         config=RunnableConfig(recursion_limit=15),
+                                         )
             generation.update(output=result)
         return result
 
-    return create
+    return ainvoke
 
 
 @lru_cache(maxsize=None)
-def get_chat_model(profile_name: str) -> ChatLiteLLM:
-    # _require_active_trace()
-    profile = PROFILES[profile_name]
-    return ChatLiteLLM(
-        model=profile.model,
-        api_base=profile.api_base,
-        temperature=profile.temperature,
-        max_tokens=profile.max_tokens,
-        model_kwargs={
-            "top_p": profile.top_p,
-            "top_k": profile.top_k,
-            "min_p": profile.min_p,
-            "presence_penalty": profile.presence_penalty,
-            "repetition_penalty": profile.repetition_penalty,
-            "chat_template_kwargs": profile.chat_template_kwargs,
-        },
-    )
+def get_async_instructor_client(llm_profile: LLMProfile):
+    client = instructor.from_litellm(acompletion, mode=Mode.JSON)
 
-
-@lru_cache(maxsize=None)
-def get_async_instructor_client(profile_name: str):
-    profile = PROFILES[profile_name]
-    client = instructor.from_litellm(acompletion)
-
-    async def create(**kwargs):
+    async def create(response_model: BaseModel, messages: List[BaseMessage], prompt: Optional[PromptClient] = None, max_retries: int = 3):
         # _require_active_trace()
         langfuse = get_client()
         with langfuse.start_as_current_observation(
-            as_type="generation",
-            name=f"llm:{profile_name}",
-            model=profile.model,
-            input=kwargs.get("messages"),
+                as_type="generation",
+                name=llm_profile.name,
+                model=llm_profile.model,
+                input=messages,
+                prompt=prompt
         ) as generation:
             result = await client.chat.completions.create(
-                model=profile.model,
-                api_base=profile.api_base,
-                temperature=profile.temperature,
-                max_tokens=profile.max_tokens,
-                top_p=profile.top_p,
-                top_k=profile.top_k,
-                min_p=profile.min_p,
-                presence_penalty=profile.presence_penalty,
-                repetition_penalty=profile.repetition_penalty,
-                chat_template_kwargs=profile.chat_template_kwargs,
-                **kwargs,
+                response_model=response_model,
+                messages = messages,
+                max_retries = max_retries,
+                **llm_profile.to_request_kwargs()
             )
             generation.update(output=result)
         return result

@@ -3,15 +3,18 @@ import json
 from langchain_core.tools import BaseTool
 
 from graph.graph_utils import stringify_result
+from models.llm_profile import default_non_thinking_model
 from models.plan import Plan, PlanStepArgs
 from services.llm_factory import get_async_instructor_client
+from langfuse import get_client as get_langfuse_client
 
 
 async def execute_plan(plan: Plan, tools: list[BaseTool], customer_id: str, conversation_history: str) -> list[dict]:
     tools_by_name = {t.name: t for t in tools}
     observations = []
+    langfuse_client = get_langfuse_client()
 
-    client=get_async_instructor_client("qwen3_non_thinking")
+    client=get_async_instructor_client(default_non_thinking_model)
 
     for step in plan.steps:
         if step.tool_hint is None or step.tool_hint not in tools_by_name:
@@ -32,23 +35,21 @@ async def execute_plan(plan: Plan, tools: list[BaseTool], customer_id: str, conv
         else:
             schema_str = json.dumps(schema.model_json_schema())
 
-        arg_prompt = f"""
-You are about to call the tool "{tool.name}": {tool.description}
-Tool schema: {schema_str}
 
-Current step: {step.description}
-Prior step results:
-{prior}
-Customer ID: {customer_id}
-Conversation: {conversation_history}
+        langfuse_arg_prompt = langfuse_client.get_prompt("agent/plan/call_tool")
+        arg_prompt = langfuse_arg_prompt.compile(
+            tool_name=tool.name,
+            tool_description=tool.description,
+            schema_str=schema_str,
+            step_description=step.description,
+            prior=prior,
+            customer_id=customer_id,
+            conversation_history=conversation_history
+        )
 
-
-Extract the arguments this tool call needs, based on the conversation
-and prior results. If a required value isn't available anywhere, leave
-it out rather than guessing.
-"""
         try:
             step_args = await client(
+                prompt=langfuse_arg_prompt,
                 response_model=PlanStepArgs,
                 messages=[{"role": "user", "content": arg_prompt}],
             )
