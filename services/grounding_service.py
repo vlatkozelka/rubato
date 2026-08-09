@@ -1,5 +1,7 @@
 import logging
 
+from langfuse import get_client as get_langfuse_client
+
 from models.agent_observation import AgentObservation
 from models.decisions import ComplexCaseResolution
 from models.grounding_verdict import GroundingVerdict
@@ -32,25 +34,16 @@ async def check_and_correct(resolution: ComplexCaseResolution,
                             observations: list[AgentObservation],
                             tools_registry: dict[str, str]
                             ) -> ComplexCaseResolution:
-    prompt = f"""
-Customer-facing message: {resolution.reply}
-
-Tool reference (what each tool actually does):
-{_format_tool_reference(observations=observations, tool_registry=tools_registry)}
-
-Observations from this run (the only things that actually happened):
-{_format_observations(observations=observations)}
-
-Does the customer-facing message claim any action was completed
-(refund approved, return initiated, exchange processed, etc.) that is
-NOT backed by a matching successful tool call above? Use the tool
-reference to judge what each tool call actually accomplished — a tool
-that creates a pending record is not the same as one that executes an
-action. Only flag actual completed-action claims, not descriptions of
-investigation or next steps.
-"""
+    langfuse_client = get_langfuse_client()
+    langfuse_prompt = langfuse_client.get_prompt("agent/grounding/check_and_correct")
+    prompt = langfuse_prompt.compile(
+        customer_message=resolution.reply,
+        tool_reference=_format_tool_reference(observations=observations, tool_registry=tools_registry),
+        observations=_format_observations(observations=observations),
+    )
 
     verdict = await client(
+        prompt=langfuse_prompt,
         response_model=GroundingVerdict,
         messages=[{"role": "user", "content": prompt}],
     )

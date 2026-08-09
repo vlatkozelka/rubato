@@ -2,8 +2,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from models.llm_profile import default_non_thinking_model, groq_qwen_no_reasoning, groq_qwen_reasoning, \
-    groq_gpt_oss_20_low_reasoning, groq_gpt_oss_20_high_reasoning
+from models.llm_profile import qwen3_non_thinking, qwen3_thinking
 
 import asyncio
 
@@ -12,7 +11,7 @@ from services.llm_factory import get_async_instructor_client
 
 async def test():
     sys_prompt = "You are a funny chatbot, your purpose is to entertain"
-    profiles = [groq_gpt_oss_20_low_reasoning, groq_gpt_oss_20_high_reasoning]
+    profiles = [qwen3_non_thinking, qwen3_thinking]
     for profile in profiles:
         print(f"testing model: {profile.name}---->\n\n")
         client = get_async_instructor_client(profile)

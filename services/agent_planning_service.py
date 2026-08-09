@@ -1,6 +1,7 @@
 from typing import List
 
 from langchain_core.tools import BaseTool
+from langfuse import get_client as get_langfuse_client
 
 from models.agent_observation import AgentObservation
 from models.conversation_state import ConversationState
@@ -12,29 +13,21 @@ from services.llm_factory import get_async_instructor_client
 
 async def create_agent_plan(conversation_state: ConversationState, tools: List[BaseTool]) -> Plan:
     client = get_async_instructor_client(default_thinking_model)
+    langfuse_client = get_langfuse_client()
 
     tool_descriptions = "\n".join(
         f"- {t.name}: {t.description}" for t in tools
     )
 
-    prompt = f"""
-You are a customer support agent at an e-commerce store
-Your task is to generate a plan to resolve a customer's case given the following data
-
-Customer Message: {conversation_state.message}
-Customer ID: {conversation_state.customer_id}
-
-You can use these tools to build your plan:
-
-{tool_descriptions}
-
-Produce an ordered list of steps to investigate and resolve this case.
-Each step should reference a tool_hint if one clearly applies, or null if
-the step is reasoning-only (e.g. the final decision step).
-Limit steps to 20 maximum. Aim for minimizing the number of steps
-"""
+    langfuse_prompt = langfuse_client.get_prompt("agent/plan/create_plan")
+    prompt = langfuse_prompt.compile(
+        customer_message=conversation_state.message,
+        customer_id=conversation_state.customer_id,
+        tool_descriptions=tool_descriptions,
+    )
 
     return await client(
+        prompt=langfuse_prompt,
         response_model=Plan,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -42,25 +35,21 @@ Limit steps to 20 maximum. Aim for minimizing the number of steps
 
 async def resolve_from_observations(state: ConversationState, observations: list[AgentObservation]) -> ComplexCaseResolution:
     client = get_async_instructor_client(default_non_thinking_model)
+    langfuse_client = get_langfuse_client()
 
     obs_text = "\n".join(
         f"Step {o.step_id} ({o.tool}): {o.result}"
         for o in observations
     ) or "No steps produced observations."
 
-    prompt = f"""
-Original customer inquiry: {state.message}
-
-You investigated this case and gathered the following observations:
-{obs_text}
-
-Based on these observations, decide how to resolve the case. If a
-necessary observation is missing or failed, resolve as best you can
-given what's available, or indicate more information is needed from
-the customer.
-"""
+    langfuse_prompt = langfuse_client.get_prompt("agent/plan/resolve_observations")
+    prompt = langfuse_prompt.compile(
+        customer_message=state.message,
+        observations=obs_text,
+    )
 
     return await client(
+        prompt=langfuse_prompt,
         response_model=ComplexCaseResolution,
         messages=[{"role": "user", "content": prompt}],
     )

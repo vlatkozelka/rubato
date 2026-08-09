@@ -229,8 +229,8 @@ groq_qwen_reasoning = GroqProfile(
     reasoning_effort="default"
 )
 
-default_non_thinking_model = groq_gpt_oss_20_low_reasoning
-default_thinking_model = groq_gpt_oss_20_high_reasoning
+default_non_thinking_model = qwen3_non_thinking
+default_thinking_model = qwen3_thinking
 
 #claude_sonnet = ClaudeAPIProfile(model=Model.CLAUDE_3_5_SONNET)
 #claude_haiku = ClaudeAPIProfile(model=Model.CLAUDE_3_5_HAIKU)

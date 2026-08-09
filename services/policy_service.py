@@ -31,7 +31,7 @@ async def answer_policy_question(question: str, excerpts: str) -> PolicyAnswer:
 
 async def get_refund_policy(category: str, excerpts: str) -> RefundPolicy:
     langfuse_client = get_langfuse_client()
-    langfuse_prompt = langfuse_client.get_prompt("policy/generic_policy_question")
+    langfuse_prompt = langfuse_client.get_prompt("policy/refund_policy_question")
     sys_prompt = langfuse_prompt.compile(category=category)
 
     client = get_async_instructor_client(default_non_thinking_model)
