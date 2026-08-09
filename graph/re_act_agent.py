@@ -6,7 +6,7 @@ from graph.graph_utils import extract_observations, build_tool_registry
 from mcp_client.client import get_safe_langchain_tools
 from models.conversation_state import ConversationState
 from models.decisions import ComplexCaseResolution
-from models.llm_profile import default_thinking_model
+from models.llm_profile import default_non_thinking_model
 from services.llm_factory import get_agent_client
 
 
@@ -24,7 +24,7 @@ async def call_agent(state: ConversationState) -> ConversationState:
     tools = await get_safe_langchain_tools()
     tools_dict = build_tool_registry(tools)
 
-    agent_client = get_agent_client(profile=default_thinking_model)
+    agent_client = get_agent_client(profile=default_non_thinking_model)
     result = await agent_client(
         messages=messages,
         tools=tools,

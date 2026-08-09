@@ -17,12 +17,6 @@ class LogcatFormatter(logging.Formatter):
         return f"{timestamp}\t{tag}\t{record.levelname}\t{record.getMessage()}"
 
 
-def configure_logcat_logging(level: int = logging.INFO) -> None:
-    handler = logging.StreamHandler()
-    handler.setFormatter(LogcatFormatter())
-    root = logging.getLogger()
-    root.handlers = [handler]
-    root.setLevel(level)
 
 
 def configure_logging() -> None:
@@ -41,6 +35,10 @@ def configure_logging() -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(LogcatFormatter())
     handler.addFilter(ConversationLogFilter())
+
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(logging.INFO)
 
     rubato_logger = logging.getLogger("rubato")
     rubato_logger.handlers = [handler]

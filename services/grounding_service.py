@@ -10,7 +10,6 @@ from services.llm_factory import get_async_instructor_client
 
 logger = logging.getLogger(__name__)
 
-client = get_async_instructor_client(default_non_thinking_model)
 
 
 def _format_observations(observations: list[AgentObservation]) -> str:
@@ -34,6 +33,7 @@ async def check_and_correct(resolution: ComplexCaseResolution,
                             observations: list[AgentObservation],
                             tools_registry: dict[str, str]
                             ) -> ComplexCaseResolution:
+    client = get_async_instructor_client(default_non_thinking_model)
     langfuse_client = get_langfuse_client()
     langfuse_prompt = langfuse_client.get_prompt("agent/grounding/check_and_correct")
     prompt = langfuse_prompt.compile(

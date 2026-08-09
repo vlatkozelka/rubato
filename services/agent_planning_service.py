@@ -6,13 +6,13 @@ from langfuse import get_client as get_langfuse_client
 from models.agent_observation import AgentObservation
 from models.conversation_state import ConversationState
 from models.decisions import ComplexCaseResolution
-from models.llm_profile import default_non_thinking_model, default_thinking_model
+from models.llm_profile import default_non_thinking_model
 from models.plan import Plan
 from services.llm_factory import get_async_instructor_client
 
 
 async def create_agent_plan(conversation_state: ConversationState, tools: List[BaseTool]) -> Plan:
-    client = get_async_instructor_client(default_thinking_model)
+    client = get_async_instructor_client(default_non_thinking_model)
     langfuse_client = get_langfuse_client()
 
     tool_descriptions = "\n".join(
@@ -33,7 +33,8 @@ async def create_agent_plan(conversation_state: ConversationState, tools: List[B
     )
 
 
-async def resolve_from_observations(state: ConversationState, observations: list[AgentObservation]) -> ComplexCaseResolution:
+async def resolve_from_observations(state: ConversationState,
+                                    observations: list[AgentObservation]) -> ComplexCaseResolution:
     client = get_async_instructor_client(default_non_thinking_model)
     langfuse_client = get_langfuse_client()
 
