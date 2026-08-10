@@ -8,8 +8,12 @@ from app.config import POSTGRES_DSN
 from app.timing import log_duration
 from models.chunk import Chunk
 from services.embedding_service import embed_text
+from services.reranker_service import rerank
 
 logger = logging.getLogger("rubato.services.retrieval")
+
+RRF_K = 60
+CANDIDATE_K = 20
 
 
 async def _create_excerpts(query: str, top_k: int) -> str:
@@ -22,7 +26,52 @@ async def _create_excerpts(query: str, top_k: int) -> str:
     return excerpts
 
 
-async def retrieve_chunks(query: str, top_k: int = 3, strategy: str = "section_aware") -> list[Chunk]:
+async def _vector_candidates(cur, query_vector, strategy: str, candidate_k: int):
+    await cur.execute(
+        """
+        SELECT id, text, source, chunk_index, strategy
+        FROM policy_chunks
+        WHERE strategy = %s
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s
+        """,
+        (strategy, query_vector, candidate_k),
+    )
+    return await cur.fetchall()
+
+
+async def _fulltext_candidates(cur, query: str, strategy: str, candidate_k: int):
+    await cur.execute(
+        """
+        SELECT id, text, source, chunk_index, strategy
+        FROM policy_chunks
+        WHERE strategy = %s AND text_search @@ plainto_tsquery('english', %s)
+        ORDER BY ts_rank(text_search, plainto_tsquery('english', %s)) DESC
+        LIMIT %s
+        """,
+        (strategy, query, query, candidate_k),
+    )
+    return await cur.fetchall()
+
+
+def _reciprocal_rank_fusion(*ranked_lists: list[tuple], k: int = RRF_K) -> dict[int, tuple[float, tuple]]:
+    """
+    Each ranked_list is a list of rows (id, text, source, chunk_index, strategy),
+    already ordered best-first. Returns {chunk_id: (fused_score, row)}.
+    """
+    fused: dict[int, float] = {}
+    rows_by_id: dict[int, tuple] = {}
+
+    for ranked_list in ranked_lists:
+        for rank, row in enumerate(ranked_list):
+            chunk_id = row[0]
+            rows_by_id[chunk_id] = row
+            fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (k + rank + 1)
+
+    return {chunk_id: (score, rows_by_id[chunk_id]) for chunk_id, score in fused.items()}
+
+
+async def retrieve_chunks(query: str, top_k: int = 5, strategy: str = "section_aware") -> list[Chunk]:
     conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     await register_vector_async(conn)
     cur = conn.cursor()
@@ -31,27 +80,30 @@ async def retrieve_chunks(query: str, top_k: int = 3, strategy: str = "section_a
         query_vector = await asyncio.to_thread(embed_text, query)
 
     with log_duration(logger, "db_query_finished", service="retrieval_service", function="retrieve_chunks",
-                      strategy=strategy, top_k=top_k):
-        await cur.execute(
-            """
-            SELECT text, source, chunk_index, strategy
-            FROM policy_chunks
-            WHERE strategy = %s
-            ORDER BY embedding <=> %s::vector
-            LIMIT %s
-            """,
-            (strategy, query_vector, top_k),
-        )
-        rows = await cur.fetchall()
+                      strategy=strategy, candidate_k=CANDIDATE_K):
+        vector_rows = await _vector_candidates(cur, query_vector, strategy, CANDIDATE_K)
+        fulltext_rows = await _fulltext_candidates(cur, query, strategy, CANDIDATE_K)
 
     await cur.close()
     await conn.close()
 
+    fused = _reciprocal_rank_fusion(vector_rows, fulltext_rows)
+    if not fused:
+        return []
+
+    candidates = [(chunk_id, row[1]) for chunk_id, (_, row) in fused.items()]
+
+    with log_duration(logger, "rerank_finished", service="reranker_service", function="rerank",
+                      candidate_count=len(candidates)):
+        top_ids = await asyncio.to_thread(rerank, query, candidates, top_k)
+
+    rows_by_id = {chunk_id: row for chunk_id, (_, row) in fused.items()}
     return [
-        Chunk(text=text, source=source, chunk_index=chunk_index, strategy=strategy)
-        for text, source, chunk_index, strategy in rows
+        Chunk(text=row[1], source=row[2], chunk_index=row[3], strategy=row[4])
+        for chunk_id in top_ids
+        for row in [rows_by_id[chunk_id]]
     ]
 
 
-async def retrieve_policy_excerpts(query: str, top_k: int = 3) -> str:
+async def retrieve_policy_excerpts(query: str, top_k: int = 5) -> str:
     return await _create_excerpts(query, top_k)

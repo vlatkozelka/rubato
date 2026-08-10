@@ -3,7 +3,7 @@ from services.retrieval_service import retrieve_policy_excerpts
 
 
 @mcp.tool()
-async def retrieve_policy_excerpts_tool(question: str, top_k: int = 3) -> str:
+async def retrieve_policy_excerpts_tool(question: str, top_k: int = 5) -> str:
     """
     Retrieve ranked policy document excerpts relevant to a customer question
     (returns, shipping, warranty), via hybrid search and reranking. Returns

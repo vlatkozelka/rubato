@@ -10,7 +10,7 @@ async def answer_policy_question_node(state: ConversationState) -> ConversationS
     if triage_result is None:
         raise ValueError("performing check_price on a conversation state with triage_result None")
     else:
-        excerpts = await call_tool("retrieve_policy_excerpts_tool", {"question": question, "top_k": 3})
+        excerpts = await call_tool("retrieve_policy_excerpts_tool", {"question": question, "top_k": 5})
         policy_answer = PolicyAnswer.model_validate(await answer_policy_question(question=question, excerpts=excerpts))
         state.reply = policy_answer.answer
         state.citations = policy_answer.cited_sources or None

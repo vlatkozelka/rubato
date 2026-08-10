@@ -233,7 +233,7 @@ claude_haiku = ClaudeAPIProfile(
 )
 
 default_non_thinking_model = qwen3_non_thinking
-default_thinking_model = qwen3_thinking
+default_thinking_model = qwen3_non_thinking
 
 
 
