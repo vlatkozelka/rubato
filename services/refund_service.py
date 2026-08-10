@@ -43,8 +43,9 @@ async def check_refund(order_id: str, product_id: str, customer_id: str, reason:
                     delivered_at = datetime.fromisoformat(order.status.delivered_at)
                     elapsed = datetime.now() - delivered_at
                     days_since_delivery = elapsed.days
-                    excerpts = await retrieval_service.retrieve_policy_excerpts(
+                    chunks = await retrieval_service.retrieve_policy_excerpts(
                         f"what is the refund policy for items of category: {category}")
+                    excerpts = retrieval_service.create_excerpts_from_chunks(chunks)
                     refund_policy = await get_refund_policy(category, excerpts)
                     if refund_policy.allowed_duration > days_since_delivery:
                         return Approval(

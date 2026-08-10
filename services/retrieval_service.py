@@ -1,12 +1,13 @@
 import asyncio
 import logging
+from typing import List
 
 import psycopg
 from pgvector.psycopg import register_vector_async
 
 from app.config import POSTGRES_DSN
 from app.timing import log_duration
-from models.chunk import Chunk
+from models.retrieved_chunk import RetrievedChunk
 from services.embedding_service import embed_text
 from services.reranker_service import rerank
 
@@ -16,14 +17,6 @@ RRF_K = 60
 CANDIDATE_K = 20
 
 
-async def _create_excerpts(query: str, top_k: int) -> str:
-    chunks = await retrieve_chunks(query, top_k=top_k)
-
-    excerpts = "\n\n".join(
-        f"[{c.source}#{c.text.splitlines()[0].lstrip('# ').strip()}]\n{c.text}"
-        for c in chunks
-    )
-    return excerpts
 
 
 async def _vector_candidates(cur, query_vector, strategy: str, candidate_k: int):
@@ -71,7 +64,7 @@ def _reciprocal_rank_fusion(*ranked_lists: list[tuple], k: int = RRF_K) -> dict[
     return {chunk_id: (score, rows_by_id[chunk_id]) for chunk_id, score in fused.items()}
 
 
-async def retrieve_chunks(query: str, top_k: int = 5, strategy: str = "section_aware") -> list[Chunk]:
+async def retrieve_chunks(query: str, top_k: int = 5, strategy: str = "section_aware") -> list[RetrievedChunk]:
     conn = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
     await register_vector_async(conn)
     cur = conn.cursor()
@@ -95,15 +88,31 @@ async def retrieve_chunks(query: str, top_k: int = 5, strategy: str = "section_a
 
     with log_duration(logger, "rerank_finished", service="reranker_service", function="rerank",
                       candidate_count=len(candidates)):
-        top_ids = await asyncio.to_thread(rerank, query, candidates, top_k)
+        reranked = await asyncio.to_thread(rerank, query, candidates, top_k)  # list[(chunk_id, rerank_score)]
 
+    rrf_scores = {chunk_id: score for chunk_id, (score, _) in fused.items()}
     rows_by_id = {chunk_id: row for chunk_id, (_, row) in fused.items()}
+
     return [
-        Chunk(text=row[1], source=row[2], chunk_index=row[3], strategy=row[4])
-        for chunk_id in top_ids
-        for row in [rows_by_id[chunk_id]]
+        RetrievedChunk(
+            chunk_id=chunk_id,
+            source_doc=rows_by_id[chunk_id][2],
+            text=rows_by_id[chunk_id][1],
+            rank=rank,
+            rrf_score=rrf_scores[chunk_id],
+            rerank_score=rerank_score,
+        )
+        for rank, (chunk_id, rerank_score) in enumerate(reranked, start=1)
     ]
 
 
-async def retrieve_policy_excerpts(query: str, top_k: int = 5) -> str:
-    return await _create_excerpts(query, top_k)
+async def retrieve_policy_excerpts(query: str, top_k: int = 5) -> List[RetrievedChunk]:
+    return await retrieve_chunks(query, top_k)
+
+
+def create_excerpts_from_chunks(chunks: List[RetrievedChunk]) -> str:
+    excerpts = "\n\n".join(
+        f"[{chunk.source_doc}#{chunk.text.splitlines()[0].lstrip('# ').strip()}]\n{chunk.text}"
+        for chunk in chunks
+    )
+    return excerpts

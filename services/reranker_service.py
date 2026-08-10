@@ -10,10 +10,10 @@ def _get_reranker() -> CrossEncoder:
     return CrossEncoder(RERANKER_MODEL, device="cpu")
 
 
-def rerank(query: str, candidates: list[tuple[int, str]], top_k: int) -> list[int]:
+def rerank(query: str, candidates: list[tuple[int, str]], top_k: int) -> list[tuple[int, float]]:
     """
     candidates: list of (chunk_id, chunk_text) pairs, unordered.
-    Returns chunk_ids sorted by reranked relevance, truncated to top_k.
+    Returns (chunk_id, rerank_score) pairs sorted by reranked relevance, truncated to top_k.
     """
     if not candidates:
         return []
@@ -27,4 +27,4 @@ def rerank(query: str, candidates: list[tuple[int, str]], top_k: int) -> list[in
         key=lambda pair: pair[1],
         reverse=True,
     )
-    return [chunk_id for chunk_id, _ in ranked[:top_k]]
+    return ranked[:top_k]
