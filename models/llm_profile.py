@@ -17,13 +17,14 @@ class Model(str, Enum):
     GROQ_GPT_OSS_20 = "groq/openai/gpt-oss-20b"
     GROQ_QWEN_27_B = "groq/qwen/qwen3.6-27b"
     CLAUDE_4_5_HAIKU = "anthropic/claude-haiku-4-5-20251001"
+    GEMINI_3_5_FLASH_LITE = "gemini/gemini-3.5-flash-lite"
 
 
 class ModelProfile(ABC):
     """Base class for model profiles."""
     name: str
     model: Model
-    api_base: str
+    api_base: Optional[str] = None
     api_key: Optional[str] = None
 
     @abstractmethod
@@ -75,7 +76,7 @@ class OpenRouterProfile(ModelProfile):
     name: str
     model: Model
     api_base = "https://openrouter.ai/api/v1"
-    api_key = os.environ["OPEN_ROUTER_API_KEY"]
+    api_key = os.environ.get("OPEN_ROUTER_API_KEY","")
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     reasoning: Optional[bool] = None  # -> {"reasoning": {"enabled": ...}}
@@ -104,7 +105,7 @@ class ClaudeAPIProfile(ModelProfile):
     name: str
     model: Model
     api_base: str = "https://api.anthropic.com/v1/messages"
-    api_key = os.environ.get("CLAUDE_API_KEY")
+    api_key = os.environ.get("CLAUDE_API_KEY","")
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     reasoning: Optional[bool] = None  # -> {"thinking": {"type": ..., "budget_tokens": ...}}
@@ -132,7 +133,7 @@ class GroqProfile(ModelProfile):
     name: str
     model: Model
     api_base = "https://api.groq.com/openai/v1"
-    api_key = os.environ.get("GROQ_API_KEY")
+    api_key = os.environ.get("GROQ_API_KEY","")
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     reasoning_effort: Optional[
@@ -149,6 +150,25 @@ class GroqProfile(ModelProfile):
             allowed_openai_params=['reasoning_effort'],
             reasoning_effort=self.reasoning_effort,
             reasoning_format=self.reasoning_format
+        )
+
+@dataclass(frozen=True)
+class GeminiProfile(ModelProfile):
+    name: str
+    model: Model
+    api_key: Optional[str] = os.environ.get("GEMINI_API_KEY","")
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    reasoning_effort: Optional[str] = None  # "minimal", "low", "medium", "high"
+
+    def to_request_kwargs(self) -> dict[str, Any]:
+        return self._omit_none(
+            model=self.model.value,
+            api_base=self.api_base,
+            api_key=self.api_key,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            reasoning_effort=self.reasoning_effort,
         )
 
 
@@ -232,9 +252,21 @@ claude_haiku = ClaudeAPIProfile(
     reasoning=False
 )
 
-default_non_thinking_model = qwen3_non_thinking
-default_thinking_model = qwen3_non_thinking
+gemini_flash_3_5_lite_minimal_reasoning = GeminiProfile(
+    name="gemini_3_5_flash_lite_low_reasoning",
+    model=Model.GEMINI_3_5_FLASH_LITE,
+    reasoning_effort="minimal",
+)
+
+gemini_flash_3_5_lite_medium_reasoning = GeminiProfile(
+    name="gemini_3_5_flash_lite_low_reasoning",
+    model=Model.GEMINI_3_5_FLASH_LITE,
+    reasoning_effort="medium",
+)
+
+default_non_thinking_model = gemini_flash_3_5_lite_minimal_reasoning
+default_thinking_model = gemini_flash_3_5_lite_medium_reasoning
 
 
 
-LLMProfile = Union[LocalVLLMProfile, OpenRouterProfile, ClaudeAPIProfile, GroqProfile]
+LLMProfile = Union[LocalVLLMProfile, OpenRouterProfile, ClaudeAPIProfile, GroqProfile, GeminiProfile]
