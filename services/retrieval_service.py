@@ -8,7 +8,7 @@ from pgvector.psycopg import register_vector_async
 from app.config import POSTGRES_DSN
 from app.timing import log_duration
 from models.retrieved_chunk import RetrievedChunk
-from services.embedding_service import embed_text
+from services.embedding_service import embed_query
 from services.reranker_service import rerank
 
 logger = logging.getLogger("rubato.services.retrieval")
@@ -38,8 +38,8 @@ async def _fulltext_candidates(cur, query: str, strategy: str, candidate_k: int)
         """
         SELECT id, text, source, chunk_index, strategy
         FROM policy_chunks
-        WHERE strategy = %s AND text_search @@ plainto_tsquery('english', %s)
-        ORDER BY ts_rank(text_search, plainto_tsquery('english', %s)) DESC
+        WHERE strategy = %s AND text_search @@ plainto_tsquery('simple', %s)
+        ORDER BY ts_rank(text_search, plainto_tsquery('simple', %s)) DESC
         LIMIT %s
         """,
         (strategy, query, query, candidate_k),
@@ -69,8 +69,8 @@ async def retrieve_chunks(query: str, top_k: int = 5, strategy: str = "section_a
     await register_vector_async(conn)
     cur = conn.cursor()
 
-    with log_duration(logger, "embedding_call_finished", service="embedding_service", function="embed_text"):
-        query_vector = await asyncio.to_thread(embed_text, query)
+    with log_duration(logger, "embedding_call_finished", service="embedding_service", function="embed_query"):
+        query_vector = await embed_query(query)
 
     with log_duration(logger, "db_query_finished", service="retrieval_service", function="retrieve_chunks",
                       strategy=strategy, candidate_k=CANDIDATE_K):
@@ -88,7 +88,7 @@ async def retrieve_chunks(query: str, top_k: int = 5, strategy: str = "section_a
 
     with log_duration(logger, "rerank_finished", service="reranker_service", function="rerank",
                       candidate_count=len(candidates)):
-        reranked = await asyncio.to_thread(rerank, query, candidates, top_k)  # list[(chunk_id, rerank_score)]
+        reranked = await rerank(query, candidates, top_k)  # list[(chunk_id, rerank_score)]
 
     rrf_scores = {chunk_id: score for chunk_id, (score, _) in fused.items()}
     rows_by_id = {chunk_id: row for chunk_id, (_, row) in fused.items()}

@@ -18,7 +18,7 @@ FILLER_UNITS = [
     "Opened software is non-returnable under any circumstance. ",
 ]
 
-RUN_SEED = int(time.time())  # different every script execution
+RUN_SEED = int(time.time())  # different every scripts execution
 
 def build_prompt(case_id: int) -> str:
     # Deterministic-but-distinct shuffle per case so the prefix genuinely

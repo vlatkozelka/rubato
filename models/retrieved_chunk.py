@@ -7,4 +7,4 @@ class RetrievedChunk(BaseModel):
     text: str
     rank: int                # final position after rerank
     rrf_score: float         # fusion score, pre-rerank
-    rerank_score: float      # cross-encoder score, post-rerank
+    rerank_score: float      # Voyage relevance score, post-rerank

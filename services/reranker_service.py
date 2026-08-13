@@ -1,16 +1,11 @@
-from functools import lru_cache
+import voyageai
 
-from sentence_transformers import CrossEncoder
+RERANKER_MODEL = "rerank-2.5"
 
-RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
-
-
-@lru_cache(maxsize=1)
-def _get_reranker() -> CrossEncoder:
-    return CrossEncoder(RERANKER_MODEL, device="cpu")
+_rerank_client = voyageai.AsyncClient()
 
 
-def rerank(query: str, candidates: list[tuple[int, str]], top_k: int) -> list[tuple[int, float]]:
+async def rerank(query: str, candidates: list[tuple[int, str]], top_k: int) -> list[tuple[int, float]]:
     """
     candidates: list of (chunk_id, chunk_text) pairs, unordered.
     Returns (chunk_id, rerank_score) pairs sorted by reranked relevance, truncated to top_k.
@@ -18,13 +13,7 @@ def rerank(query: str, candidates: list[tuple[int, str]], top_k: int) -> list[tu
     if not candidates:
         return []
 
-    model = _get_reranker()
-    pairs = [[query, text] for _, text in candidates]
-    scores = model.predict(pairs)
+    documents = [text for _, text in candidates]
+    result = await _rerank_client.rerank(query, documents, model=RERANKER_MODEL, top_k=top_k)
 
-    ranked = sorted(
-        zip((chunk_id for chunk_id, _ in candidates), scores),
-        key=lambda pair: pair[1],
-        reverse=True,
-    )
-    return ranked[:top_k]
+    return [(candidates[r.index][0], r.relevance_score) for r in result.results]
