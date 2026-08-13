@@ -264,8 +264,8 @@ gemini_flash_3_5_lite_medium_reasoning = GeminiProfile(
     reasoning_effort="medium",
 )
 
-default_non_thinking_model = gemini_flash_3_5_lite_minimal_reasoning
-default_thinking_model = gemini_flash_3_5_lite_medium_reasoning
+default_non_thinking_model = qwen3_non_thinking
+default_thinking_model = qwen3_non_thinking
 
 
 

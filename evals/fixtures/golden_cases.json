@@ -2,9 +2,10 @@
   "_meta": {
     "eval_reference_date": "2026-08-10",
     "note": "All 'days out' / window math in each case's notes field is computed against this reference date. If the eval suite is run on a materially different date, window-boundary cases (rr_003, rf_001, cc_002, etc.) should be re-checked against real elapsed time rather than trusted blindly.",
-    "policy_docs_version": "return-policy.md and warranty.md as corrected 2026-08-10 \u2014 defect timing is now solely governed by warranty.md's 90-day window; return-policy.md's 30-day/14-day windows apply to change-of-mind returns only.",
-    "return_abuse_threshold": "3+ changed_mind returns within a rolling 60-day window. cust_006 currently has 2 (ord_1012 on 2026-07-19, ord_1018 on 2026-07-27) \u2014 below threshold. No customer in seed data currently crosses it; cc_002 and cc_011 test correct non-triggering.",
-    "scope": "Phase 12 scoped down to two components: triage classification accuracy (exact-match, all 37 non-injection cases) and policy_question answer quality (RAGAS/LLM-as-judge, the 8 pq_ cases, tagged with policy-qa-golden). Guardrail/injection eval and complex_case resolution/trajectory eval are explicitly out of scope for now \u2014 see DECISIONS.md."
+    "policy_docs_version": "return-policy.md and warranty.md as corrected 2026-08-10 — defect timing is now solely governed by warranty.md's 90-day window; return-policy.md's 30-day/14-day windows apply to change-of-mind returns only.",
+    "return_abuse_threshold": "3+ changed_mind returns within a rolling 60-day window. cust_006 currently has 2 (ord_1012 on 2026-07-19, ord_1018 on 2026-07-27) — below threshold. No customer in seed data currently crosses it; cc_002 and cc_011 test correct non-triggering.",
+    "scope": "Phase 12 scoped down to two components: triage classification accuracy (exact-match, all 37 non-injection cases) and policy_question answer quality (RAGAS/LLM-as-judge, the 6 pq_ cases remaining after the 2026-08-13 relabeling pass, tagged with policy-qa-golden). Guardrail/injection eval and complex_case resolution/trajectory eval are explicitly out of scope for now — see DECISIONS.md.",
+    "relabeling_pass_2026_08_13": "After the first triage-baseline run against vLLM (37 items, several mismatches), Ali reviewed every mismatch directly against the actual system design (ali-as-judge). Six cases were relabeled based on two systemic findings, not one-off fixes: (1) return_request and refund_request nodes perform their own internal policy/eligibility checks (return window, defect coverage, order/return history, stock) — a message requesting an action should stay classified by that action even if eligibility isn't obvious from the text alone, since the downstream node resolves that, not triage. (2) A message with multiple sub-questions that are all resolvable by the same downstream node (e.g. several policy sub-questions answerable via one RAG pass) is a single instance of that intent, not complex_case — complex_case is reserved for sub-asks spanning different nodes or requiring facts not present in the message. Relabeled: cc_011->rr_005 (return_request), cc_007->rr_006 (return_request), cc_002->rr_007 (return_request), pq_006->rr_008 (return_request), cc_008->rf_007 (refund_request), pq_007->cc_013 (complex_case). Two borderline cases (pq_002, pq_003) were reviewed and kept as policy_question. pq_003's phrasing ('can I still get that covered?') is structurally similar to pq_006/rr_008's ('can I still return it?'), which WAS relabeled — this inconsistency is unresolved and flagged for a follow-up decision, not yet reconciled. Intent distribution after relabeling: order_status=4, policy_question=6, return_request=8, refund_request=7, complex_case=9, escalate=3 (total 37, unchanged)."
   },
   "cases": [
     {
@@ -29,7 +30,7 @@
       "order_id": "ord_1007",
       "expected_intent": "order_status",
       "expected_citation_sources": null,
-      "notes": "status is 'processing', delivered_at NULL. Distinct in-progress state from os_001's 'shipped' \u2014 tests both non-delivered states are handled, not collapsed into one generic 'not delivered' bucket."
+      "notes": "status is 'processing', delivered_at NULL. Distinct in-progress state from os_001's 'shipped'."
     },
     {
       "case_id": "os_003",
@@ -41,7 +42,7 @@
       "order_id": "ord_1005",
       "expected_intent": "order_status",
       "expected_citation_sources": null,
-      "notes": "delivered 2026-07-04, VIP customer. Simple happy-path status check \u2014 baseline confirmation the common case works before testing edges elsewhere."
+      "notes": "delivered 2026-07-04, VIP customer. Simple happy-path status check."
     },
     {
       "case_id": "os_004",
@@ -53,7 +54,7 @@
       "order_id": "ord_1015",
       "expected_intent": "order_status",
       "expected_citation_sources": null,
-      "notes": "ord_1015 status is 'cancelled'. Tests that a cancelled order is reported accurately rather than treated as an error or silently ignored."
+      "notes": "ord_1015 status is 'cancelled'. Tests cancelled order reported accurately."
     },
     {
       "case_id": "pq_001",
@@ -76,7 +77,7 @@
         "triage-golden",
         "policy-qa-golden"
       ],
-      "message": "My earbuds still work fine, I just want to return them, is that possible? Also what if they'd stopped working instead \u2014 is it the same timeframe?",
+      "message": "My earbuds still work fine, I just want to return them, is that possible? Also what if they'd stopped working instead — is it the same timeframe?",
       "customer_id": "cust_001",
       "order_id": "ord_1001",
       "expected_intent": "policy_question",
@@ -84,7 +85,7 @@
         "return-policy.md",
         "warranty.md"
       ],
-      "notes": "Directly tests the post-fix relationship between return-policy's 14-day electronics window (change-of-mind) and warranty's 90-day window (defect) \u2014 same product, two different questions in one message. Correct answer must distinguish them, not merge into one number."
+      "notes": "Tests the relationship between return-policy's 14-day electronics window (change-of-mind) and warranty's 90-day window (defect) — same product, two questions in one message. Reviewed and kept as policy_question after Ali's review 2026-08-13 — multiple sub-questions here are all resolvable by a single RAG pass, so this stays one policy_question intent rather than complex_case; the triage-baseline miss was a real model bug."
     },
     {
       "case_id": "pq_003",
@@ -99,7 +100,7 @@
       "expected_citation_sources": [
         "warranty.md"
       ],
-      "notes": "Delivered 2026-06-14, 57 days out at reference date. Past return-policy's 30-day standard window but within warranty's 90-day defect window. Post-fix, this is a clean single-answer synthesis case (yes, covered under warranty) rather than the old conflict-surfacing test \u2014 still real, since the agent must correctly route to warranty.md and not get anchored on return-policy's shorter windows."
+      "notes": "Delivered 2026-06-14, 57 days out. Past return-policy's 30-day window but within warranty's 90-day defect window. Synthesis case. Reviewed after Ali's review 2026-08-13 — kept as policy_question, but Ali's comments here were diagnostic (explaining why the model likely saw two intents) rather than an explicit relabel decision. Its phrasing ('can I still get that covered?') is structurally similar to pq_006/rr_008's ('can I still return it?'), which WAS relabeled to return_request — this inconsistency is unresolved, flagged for a follow-up decision."
     },
     {
       "case_id": "pq_004",
@@ -107,7 +108,7 @@
         "triage-golden",
         "policy-qa-golden"
       ],
-      "message": "I opened my software license card and the code didn't work \u2014 can I get a refund or exchange?",
+      "message": "I opened my software license card and the code didn't work — can I get a refund or exchange?",
       "customer_id": "cust_002",
       "order_id": "ord_1014",
       "expected_intent": "policy_question",
@@ -115,7 +116,7 @@
         "return-policy.md",
         "warranty.md"
       ],
-      "notes": "Tests the explicit software carve-out added in the doc fix \u2014 final sale once opened, and now explicitly excluded from warranty too (not just silent on it). Correct answer should cite both documents' matching carve-out language, not just one."
+      "notes": "Tests the software carve-out — final sale once opened, excluded from warranty too. Confirmed correct as originally labeled after Ali's review 2026-08-13 — the triage-baseline miss here is a real model bug, not a labeling issue."
     },
     {
       "case_id": "pq_005",
@@ -130,37 +131,7 @@
       "expected_citation_sources": [
         "return-policy.md"
       ],
-      "notes": "Generic abuse-threshold policy question, no specific order. Tests the RAG path surfaces the 3-returns/60-days rule accurately without needing to check this specific customer's history (that's cc_002/cc_011's job, not this case's)."
-    },
-    {
-      "case_id": "pq_006",
-      "datasets": [
-        "triage-golden",
-        "policy-qa-golden"
-      ],
-      "message": "My mom got me a sweater as a gift and I don't have the receipt, can I still return it?",
-      "customer_id": "cust_003",
-      "order_id": null,
-      "expected_intent": "policy_question",
-      "expected_citation_sources": [
-        "faq.md"
-      ],
-      "notes": "Tests retrieval from faq.md specifically (store-credit-not-refund distinction for giftless returns), separate document from the return/warranty pair."
-    },
-    {
-      "case_id": "pq_007",
-      "datasets": [
-        "triage-golden",
-        "policy-qa-golden"
-      ],
-      "message": "My package hasn't moved in a week according to the tracking page, what do I do?",
-      "customer_id": "cust_004",
-      "order_id": "ord_1010",
-      "expected_intent": "policy_question",
-      "expected_citation_sources": [
-        "shipping-policy.md"
-      ],
-      "notes": "Tests retrieval correctly routes to shipping-policy.md's lost-package clause (5 business days no movement) rather than return/warranty docs, despite surface similarity to a return complaint."
+      "notes": "Generic abuse-threshold policy question, no specific order."
     },
     {
       "case_id": "pq_008",
@@ -175,7 +146,7 @@
       "expected_citation_sources": [
         "faq.md"
       ],
-      "notes": "ord_1002 delivered 2026-07-22, 19 days out \u2014 within faq.md's 7-day price-adjustment window? No \u2014 19 days exceeds the 7-day window. Tests correct denial based on faq.md's specific window, not confusion with the unrelated 30-day return window."
+      "notes": "ord_1002 delivered 2026-07-22, 19 days out — exceeds faq.md's 7-day price-adjustment window."
     },
     {
       "case_id": "rr_001",
@@ -187,7 +158,7 @@
       "order_id": "ord_1016",
       "expected_intent": "return_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-07-11 \u2014 exactly 30 days out at reference date. Boundary test on the standard window's edge; correct behavior at exactly day 30 should be documented either way (inclusive vs exclusive), since it's genuinely ambiguous from the doc wording alone."
+      "notes": "Delivered 2026-07-11 — exactly 30 days out. Boundary test."
     },
     {
       "case_id": "rr_002",
@@ -199,7 +170,7 @@
       "order_id": "ord_1010",
       "expected_intent": "return_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-07-13, 28 days out \u2014 clearly within standard window. Clean accept case."
+      "notes": "Delivered 2026-07-13, 28 days out — clearly within standard window."
     },
     {
       "case_id": "rr_003",
@@ -211,7 +182,7 @@
       "order_id": "ord_1006",
       "expected_intent": "return_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-06-24, 47 days out \u2014 past the 30-day standard window, non-defect. Tests correct denial rather than silently approving."
+      "notes": "Delivered 2026-06-24, 47 days out — past the 30-day standard window, non-defect."
     },
     {
       "case_id": "rr_004",
@@ -223,7 +194,55 @@
       "order_id": "ord_1001",
       "expected_intent": "return_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-07-05, 36 days out \u2014 past electronics' 14-day change-of-mind window (this is not a defect claim, so warranty's 90-day window does not apply). Tests the system correctly applies the shorter electronics window rather than defaulting to the 30-day standard one."
+      "notes": "Delivered 2026-07-05, 36 days out — past electronics' 14-day change-of-mind window."
+    },
+    {
+      "case_id": "rr_005",
+      "datasets": [
+        "triage-golden"
+      ],
+      "message": "My bottle from a while back broke — well, it's more that I don't use it as much anymore, but it did get a small dent too. Can I return it?",
+      "customer_id": "cust_006",
+      "order_id": "ord_1006",
+      "expected_intent": "return_request",
+      "expected_citation_sources": null,
+      "notes": "Relabeled from cc_011 (complex_case) after Ali's review 2026-08-13 — return_request's own internal eligibility check (including the abuse-threshold check against return_history) resolves this; triage doesn't need to detect the abuse-threshold ambiguity itself, that's the node's job. The ambiguous defect-vs-changed-mind framing and the order_id/product mismatch (bottle was actually ord_1012, not ord_1006 as stated) remain useful stress tests for the return_request node's own resolution logic, just no longer a triage-classification target."
+    },
+    {
+      "case_id": "rr_006",
+      "datasets": [
+        "triage-golden"
+      ],
+      "message": "My hiking boots have a defect, I already sent an email about this but wanted to follow up — can I get a replacement pair in the same size?",
+      "customer_id": "cust_006",
+      "order_id": "ord_1018",
+      "expected_intent": "return_request",
+      "expected_citation_sources": null,
+      "notes": "Relabeled from cc_007 (complex_case) after Ali's review — requesting a replacement is a return_request; the node's internal history check (this order was already refunded, not exchanged, per return_history id 4) and stock check (prod_010 stock 0) resolve the apparent inconsistency and unavailability deterministically, no agent reasoning required. Still a useful stress test for the return_request node's own handling of the omission-grounding concern noted in Phase 10/11, just no longer a triage target."
+    },
+    {
+      "case_id": "rr_007",
+      "datasets": [
+        "triage-golden"
+      ],
+      "message": "Honestly I just don't want these tees anymore, can I send them back?",
+      "customer_id": "cust_006",
+      "order_id": "ord_1006",
+      "expected_intent": "return_request",
+      "expected_citation_sources": null,
+      "notes": "Relabeled from cc_002 (complex_case) after Ali's review — plainly worded return_request, no ambiguity in the ask itself. The abuse-threshold and window-expiry checks (47 days out, past the 30-day standard window; would also be a 3rd changed-mind return within 60 days) are resolved by the node internally, not by triage."
+    },
+    {
+      "case_id": "rr_008",
+      "datasets": [
+        "triage-golden"
+      ],
+      "message": "My mom got me a sweater as a gift and I don't have the receipt, can I still return it?",
+      "customer_id": "cust_003",
+      "order_id": null,
+      "expected_intent": "return_request",
+      "expected_citation_sources": null,
+      "notes": "Relabeled from pq_006 (policy_question) after Ali's review — 'can I still return it' about the customer's own specific item is a real request to initiate a return, not an abstract policy question, even without an order_id (gift returns are handled by the node's own giftless-return / store-credit flow per faq.md). NOTE: this case's phrasing is structurally similar to pq_003's ('can I still get that covered?'), which was kept as policy_question — that inconsistency is unresolved and flagged for a follow-up decision, not yet reconciled."
     },
     {
       "case_id": "rf_001",
@@ -235,7 +254,7 @@
       "order_id": "ord_1018",
       "expected_intent": "refund_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-07-25, 16 days out \u2014 just past warranty's 14-day immediate-replacement fast path, but well within the 90-day standard warranty window. Correct handling: not eligible for the instant no-repair-attempt path, but still eligible for the normal review-based warranty process; approval gate still required either way since it's money-moving. NOTE: ord_1018 already appears in return_history (id 4, refunded 2026-07-27) \u2014 see cc_007 for the duplicate-claim complex case this overlaps with; this simpler case assumes the agent hasn't yet checked history and tests the approval-routing mechanism in isolation."
+      "notes": "Delivered 2026-07-25, 16 days out — just past 14-day fast path, within 90-day warranty. Confirmed correct as originally labeled after Ali's review 2026-08-13 — the triage-baseline miss here is a real model bug (misread as return_request), not a labeling issue."
     },
     {
       "case_id": "rf_002",
@@ -247,7 +266,7 @@
       "order_id": "ord_1002",
       "expected_intent": "refund_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-07-22, 19 days out, standard window still open, non-defect, VIP customer. Tests the approval-gate invariant holds even for a low-friction, clearly-eligible, VIP request \u2014 no fast-tracking around the gate regardless of tier."
+      "notes": "Delivered 2026-07-22, 19 days out, standard window open, non-defect, VIP."
     },
     {
       "case_id": "rf_003",
@@ -259,7 +278,7 @@
       "order_id": "ord_1011",
       "expected_intent": "refund_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-07-03, 38 days out \u2014 past the 30-day standard window but within warranty's 90-day defect window. Tests approval gate correctly triggers on a defect-based eligibility path, not just the simpler standard-window path."
+      "notes": "Delivered 2026-07-03, 38 days out — past standard window, within warranty's 90-day defect window."
     },
     {
       "case_id": "rf_004",
@@ -271,7 +290,7 @@
       "order_id": "ord_1003",
       "expected_intent": "refund_request",
       "expected_citation_sources": null,
-      "notes": "ord_1003 status is 'shipped', delivered_at is NULL \u2014 order hasn't arrived per system records, contradicting the customer's implicit claim it should have. Tests graceful handling of a refund request against an order with no delivery date rather than crashing on a null field or fabricating eligibility math against a missing date. Likely correct path is denial-with-explanation or routing to shipping-policy's lost-package process rather than a refund approval."
+      "notes": "ord_1003 status 'shipped', delivered_at NULL. Tests graceful handling with no delivery date. Confirmed correct as originally labeled after Ali's review 2026-08-13 — 'return and refund nodes check order id, delivery date, etc. — it's deterministic, not complex' (Ali). The triage-baseline miss here is a real model bug, not a labeling issue."
     },
     {
       "case_id": "rf_005",
@@ -283,7 +302,7 @@
       "order_id": "ord_1013",
       "expected_intent": "refund_request",
       "expected_citation_sources": null,
-      "notes": "Delivered 2026-04-09, 123 days out \u2014 past both the 14-day electronics window AND the 90-day warranty window entirely. Tests that a clearly ineligible refund_request does NOT create a pending approval (no money-moving action queued for something with zero eligibility) \u2014 this is the invariant's other half: not just 'never executes without approval' but 'don't queue approvals for requests with no eligibility path at all.'"
+      "notes": "Delivered 2026-04-09, 123 days out — past both electronics and warranty windows entirely."
     },
     {
       "case_id": "rf_006",
@@ -295,7 +314,19 @@
       "order_id": "ord_1014",
       "expected_intent": "refund_request",
       "expected_citation_sources": null,
-      "notes": "Opened software, final sale per both documents' explicit carve-out. Hard denial regardless of defect claim \u2014 tests the carve-out is enforced even when phrased as a refund_request rather than a policy_question."
+      "notes": "Opened software, final sale carve-out."
+    },
+    {
+      "case_id": "rf_007",
+      "datasets": [
+        "triage-golden"
+      ],
+      "message": "This sweater has been pilling badly, way more than a sweater should. Can I get a refund on it?",
+      "customer_id": "cust_003",
+      "order_id": "ord_1009",
+      "expected_intent": "refund_request",
+      "expected_citation_sources": null,
+      "notes": "Relabeled from cc_008 (complex_case) after Ali's review — 'can I get a refund' is a direct refund_request regardless of whether the underlying defect claim is actually valid; the node's internal warranty-exclusion check (pilling is cosmetic/normal wear, not a covered defect) resolves eligibility and should deny it — that's the node's job, not triage's."
     },
     {
       "case_id": "cc_001",
@@ -310,28 +341,14 @@
         "warranty.md",
         "return-policy.md"
       ],
-      "notes": "The canonical test case, tied to real data: ord_1002 delivered 2026-07-22 (19 days out, well within both standard and warranty windows), and cust_002 has exactly 1 prior changed-mind return (ord_1008, refunded 2026-06-25) \u2014 below the 3-return abuse threshold, so should proceed to a normal exchange/refund decision, not a denial. Tests correct multi-step reasoning: order lookup, warranty lookup for the defect, return-history check confirming no abuse flag, stock check on Trailhead Rain Jacket M (prod_001, stock 4 \u2014 exchange is viable)."
-    },
-    {
-      "case_id": "cc_002",
-      "datasets": [
-        "triage-golden"
-      ],
-      "message": "Honestly I just don't want these tees anymore, can I send them back?",
-      "customer_id": "cust_006",
-      "order_id": "ord_1006",
-      "expected_intent": "complex_case",
-      "expected_citation_sources": [
-        "return-policy.md"
-      ],
-      "notes": "Delivered 2026-06-24, 47 days out \u2014 past the 30-day standard window on its own already, but ALSO tests the abuse threshold: cust_006 has 2 prior changed-mind returns (ord_1012 07-19, ord_1018 07-27). This is a genuinely ambiguous multi-factor case \u2014 window expiry alone is sufficient grounds for denial, so the abuse-threshold reasoning (which would deny escalate-to-refund-instead-of-credit even if the window were open) shouldn't be the stated reason, since it's not actually the binding constraint here. Tests whether the agent cites the correct reason, not just any true-but-irrelevant one."
+      "notes": "The canonical test case. cust_002 has 1 prior changed-mind return, below abuse threshold."
     },
     {
       "case_id": "cc_003",
       "datasets": [
         "triage-golden"
       ],
-      "message": "You guys already sent me a new pair of these boots after the sizing issue, but now THIS pair has a problem too \u2014 the sole is coming apart. What now?",
+      "message": "You guys already sent me a new pair of these boots after the sizing issue, but now THIS pair has a problem too — the sole is coming apart. What now?",
       "customer_id": "cust_004",
       "order_id": "ord_1004",
       "expected_intent": "complex_case",
@@ -339,7 +356,7 @@
         "warranty.md",
         "return-policy.md"
       ],
-      "notes": "return_history id 2: cust_004 already exchanged ord_1004/prod_009 for wrong_size (2026-06-20, resolution 'exchanged'). This message claims a NEW, different defect on the exchanged item, 57 days post-original-delivery. Tests whether the agent correctly distinguishes 'already resolved via exchange' from 'new issue on the replacement' rather than either re-litigating the sizing exchange or refusing on grounds the order was 'already handled.'"
+      "notes": "Tests distinguishing 'already resolved via exchange' from 'new issue on the replacement.'"
     },
     {
       "case_id": "cc_004",
@@ -354,7 +371,7 @@
         "warranty.md",
         "faq.md"
       ],
-      "notes": "Delivered 2026-07-03, 38 days out, within warranty's 90-day window. Combines a defect-eligibility question with a direct FAQ lookup (VIP priority handling on approval-gated requests) \u2014 tests retrieval across two docs for two sub-questions in one message, and that VIP status affects handling speed/priority framing but not the underlying eligibility math."
+      "notes": "Combines defect-eligibility with a VIP-priority FAQ lookup."
     },
     {
       "case_id": "cc_005",
@@ -368,7 +385,7 @@
       "expected_citation_sources": [
         "warranty.md"
       ],
-      "notes": "Delivered 2026-07-05, 36 days out, within 90-day warranty. Requests exchange for a DIFFERENT product (Orbit Bluetooth Speaker, prod_014, stock 8) rather than a same-item replacement \u2014 tests whether the agent recognizes this isn't standard warranty replacement and reasons about cross-product exchange (likely requiring price difference handling, since earbuds are $59 and speaker is $49) rather than blindly approving a same-item swap."
+      "notes": "Requests exchange for a DIFFERENT product — cross-product exchange reasoning."
     },
     {
       "case_id": "cc_006",
@@ -382,35 +399,7 @@
       "expected_citation_sources": [
         "shipping-policy.md"
       ],
-      "notes": "ord_1003 status 'shipped', delivered_at NULL, order date 2026-07-24 (17 days ago at reference date). Tests reasoning under return/warranty-adjacent framing ('refund') that actually needs shipping-policy's lost-package process (5 business days no movement -> carrier investigation -> reship or refund, customer's choice) rather than return-policy or warranty. Also relevant to the known orphaned-approval bug: no order_id complication here since order_id IS known, but worth watching whether the agent correctly avoids queuing a refund approval before the lost-package process even determines the package is actually lost."
-    },
-    {
-      "case_id": "cc_007",
-      "datasets": [
-        "triage-golden"
-      ],
-      "message": "My hiking boots have a defect, I already sent an email about this but wanted to follow up \u2014 can I get a replacement pair in the same size?",
-      "customer_id": "cust_006",
-      "order_id": "ord_1018",
-      "expected_intent": "complex_case",
-      "expected_citation_sources": [
-        "warranty.md"
-      ],
-      "notes": "return_history id 4: this exact order/product was already refunded (changed_mind, 2026-07-27, $128.00) \u2014 a genuinely different reason (changed_mind, not defect) than what's claimed here, and the customer no longer owns a returned item to have a 'defect' on. Also, requested replacement is prod_010 (Basecamp Hiking Boots size 10, stock 0 \u2014 out of stock even if eligible). Tests two layered checks: (1) does the agent discover via return_history that this order was already resolved and flag the apparent inconsistency rather than proceeding as if it's a fresh claim, (2) does it separately catch the stock-unavailability issue for the requested replacement. A good stress case for the 'omission' grounding gap noted in Phase 10/11 \u2014 does the agent's final reply actually surface what it found, or go quiet about the conflict."
-    },
-    {
-      "case_id": "cc_008",
-      "datasets": [
-        "triage-golden"
-      ],
-      "message": "This sweater has been pilling badly, way more than a sweater should. Can I get a refund on it?",
-      "customer_id": "cust_003",
-      "order_id": "ord_1009",
-      "expected_intent": "complex_case",
-      "expected_citation_sources": [
-        "warranty.md"
-      ],
-      "notes": "Delivered 2026-06-01, 70 days out, within warranty's 90-day window numerically \u2014 but warranty.md explicitly excludes 'normal wear over time' and 'cosmetic issues that don't affect function,' and pilling reads as exactly that, not a manufacturing defect. Tests whether the agent evaluates the NATURE of the claim against warranty's coverage criteria rather than just checking the date falls within 90 days. Correct outcome is likely denial despite being inside the window."
+      "notes": "Undelivered order framed as a refund — needs shipping-policy's lost-package process."
     },
     {
       "case_id": "cc_009",
@@ -425,7 +414,7 @@
         "warranty.md",
         "return-policy.md"
       ],
-      "notes": "Delivered 2026-03-19, 144 days out \u2014 past both the 30-day standard window AND the 90-day warranty window entirely, regardless of when the defect was actually noticed (the policy is date-of-delivery-based, not date-of-discovery-based, and neither document offers a discovery-based exception). Tests firm, correctly-grounded denial despite a sympathetic framing ('just noticed') that might otherwise pull toward leniency."
+      "notes": "Delivered 144 days out — past all coverage regardless of discovery date."
     },
     {
       "case_id": "cc_010",
@@ -439,22 +428,7 @@
       "expected_citation_sources": [
         "warranty.md"
       ],
-      "notes": "Two distinct asks in one message, about two different real orders for the same customer: ord_1013 (reading light, 123 days out, past all warranty/return coverage \u2014 deny) and ord_1007 (backpack, status 'processing' \u2014 simple status lookup). Tests whether the agent handles both without dropping one, and doesn't let the complex defect reasoning on the first swallow the simple status question on the second."
-    },
-    {
-      "case_id": "cc_011",
-      "datasets": [
-        "triage-golden"
-      ],
-      "message": "My bottle from a while back broke \u2014 well, it's more that I don't use it as much anymore, but it did get a small dent too. Can I return it?",
-      "customer_id": "cust_006",
-      "order_id": "ord_1006",
-      "expected_intent": "complex_case",
-      "expected_citation_sources": [
-        "return-policy.md",
-        "warranty.md"
-      ],
-      "notes": "Deliberately ambiguous defect-vs-changed-mind framing from a customer who is one return away from the abuse threshold (2 prior changed-mind returns). A dent from normal use is not a manufacturing defect under warranty.md's exclusions, and the message's own hedging ('more that I don't use it as much') signals genuine reason is changed-mind. Tests whether the agent classifies by the SUBSTANCE of the claim rather than accepting a defect framing at face value, especially given the customer has a real incentive to reframe a changed-mind return as a defect to dodge the abuse threshold. Also note: order_id in this message doesn't match the message content (bottle was ord_1012, not ord_1006/tees) \u2014 worth checking whether the agent catches the order/product mismatch too, though that's a secondary signal, not the primary test."
+      "notes": "Two distinct asks about two different orders for the same customer."
     },
     {
       "case_id": "cc_012",
@@ -468,7 +442,21 @@
       "expected_citation_sources": [
         "warranty.md"
       ],
-      "notes": "Delivered 2026-01-09, 213 days out \u2014 well past even the 90-day warranty window. VIP customer, explicit appeal to loyalty/tenure. Tests that VIP tier and emotional appeal don't override a hard, well-outside-any-window denial \u2014 VIP only affects speed/priority of handling per faq.md, never eligibility itself. Good pairing with cc_004, which tests the VIP-affects-priority side of the same distinction from the other direction."
+      "notes": "Delivered 213 days out — well past warranty. VIP + loyalty appeal, tests eligibility isn't overridden. Confirmed correct as originally labeled after Ali's review 2026-08-13."
+    },
+    {
+      "case_id": "cc_013",
+      "datasets": [
+        "triage-golden"
+      ],
+      "message": "My package hasn't moved in a week according to the tracking page, what do I do?",
+      "customer_id": "cust_004",
+      "order_id": "ord_1010",
+      "expected_intent": "complex_case",
+      "expected_citation_sources": [
+        "shipping-policy.md"
+      ],
+      "notes": "Relabeled from pq_007 (policy_question) after Ali's review — open-ended 'what do I do' with no single named action requires the lost-package investigation flow (shipping-policy.md's 5-business-day rule, carrier investigation, reship-or-refund choice), which is a genuine multi-step process a single policy_question answer node can't carry out on its own."
     },
     {
       "case_id": "esc_001",
@@ -480,7 +468,7 @@
       "order_id": null,
       "expected_intent": "escalate",
       "expected_citation_sources": null,
-      "notes": "Confirms the system hands off without attempting to resolve the underlying (unstated) issue itself."
+      "notes": "Confirms hand-off without attempting to resolve the underlying issue."
     },
     {
       "case_id": "esc_002",
@@ -492,7 +480,7 @@
       "order_id": null,
       "expected_intent": "escalate",
       "expected_citation_sources": null,
-      "notes": "VIP status and explicit distrust of automated handling \u2014 tests escalation triggers correctly even from a high-tier customer whose other requests (cc_004, cc_012) are otherwise handled normally, i.e. VIP tier doesn't create a bypass around escalation either."
+      "notes": "VIP status doesn't bypass escalation."
     },
     {
       "case_id": "esc_003",
@@ -504,7 +492,7 @@
       "order_id": null,
       "expected_intent": "escalate",
       "expected_citation_sources": null,
-      "notes": "Vague, no extractable order or clear ask. Tests escalation triggers on ambiguity/confusion alone, not just explicit anger or repeated-contact framing like esc_001/esc_002."
+      "notes": "Vague, no extractable order or clear ask."
     }
   ]
 }
