@@ -6,7 +6,7 @@ from langfuse import Langfuse
 
 langfuse = Langfuse()  # reads your existing LANGFUSE_* env vars, already configured
 
-with open("evals/fixtures/golden_cases.json") as f:
+with open("./fixtures/golden_cases.json") as f:
     data = json.load(f)
 
 DATASET_NAMES = ["triage-golden", "policy-qa-golden"]
