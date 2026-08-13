@@ -1051,6 +1051,69 @@ deployed config against intent before drilling into a dependency's
 internals.
 
 
+## Phase 12 — Triage evals (scoped down to a learning pass)
+
+**Date:** 2026-08-13
+
+**Decision:** Phase 12 was deliberately scoped down from the original full
+plan (golden dataset across all six intents + injection cases, retrieval
+recall@k/MRR, RAGAS on policy_question, ReAct-vs-PAE comparison, local-vLLM-
+vs-Claude-API comparison) to a single component: triage classification
+accuracy. Goal was to actually learn what an eval loop is and does, not to
+produce a complete Phase 12 scorecard in one pass.
+
+**What was built:**
+- `evals/fixtures/golden_cases.json` — 38 hand-authored cases across triage's
+  real intents (order_status, policy_question, return_request, refund_request,
+  complex_case, escalate), built against real seed data (customers, orders,
+  products, return_history) and the corrected return-policy/warranty docs.
+- Two Langfuse Datasets synced from that file (`triage-golden`, 38 items;
+  `policy-qa-golden`, 6 items — created but not yet exercised, see deferred).
+- `triage_task` (async, calls `triage_node` directly with a throwaway
+  `ConversationState`) + a Langfuse code evaluator (`intent_accuracy`,
+  exact-match against `ctx.experiment.item_expected_output`) wired through
+  `langfuse.run_experiment()`.
+- Run naming fixed to follow Langfuse's own best practice: `name` stays
+  constant (`"triage-baseline"`, identifies the operation), varying facts
+  (model, prompt version, timestamp) go in `metadata`, not hand-managed
+  version suffixes in the name string.
+- Two full eval passes against the local vLLM triage config, with manual
+  review of every mismatch ("ali-as-judge") between passes — first pass
+  surfaced two systemic triage-prompt gaps (return/refund nodes already do
+  their own internal policy/eligibility checks, so eligibility uncertainty in
+  the message shouldn't push to complex_case; multi-part policy questions
+  answerable by one RAG pass shouldn't either), both fixed in `triage`
+  prompt v2 in Langfuse Prompt Management. Also added an explicit rule +
+  golden case (`rf_008`) confirming return/refund requests don't need an
+  order_id at triage time — the downstream node validates and asks.
+
+**Deferred, not forgotten** (each is real, scoped-out Phase 12 work, not
+abandoned):
+- policy_question answer quality via RAGAS/LLM-as-judge — `policy-qa-golden`
+  dataset exists, task/evaluator not built.
+- complex_case resolution quality and tool-trajectory evaluation — explicitly
+  out of scope; production plans (see below) may drop complex_case from the
+  live system entirely, making this moot rather than merely deferred.
+- Guardrail/injection classification accuracy — no golden coverage at all
+  currently (injection cases were cut early to keep scope down).
+- Retrieval recall@k / MRR, chunking strategy comparison, Pinecone
+  comparison (confirmed never built — drops out of scope per the plan's own
+  contingency).
+- ReAct vs plan-and-execute comparison, local vLLM vs Claude API comparison.
+- No golden coverage yet for `price_check` or `chitchat` intents, or for
+  conversation-history-dependent classification — both exist in the real
+  triage prompt but postdate the original golden dataset.
+
+**Known, deliberately unresolved inconsistency:** `pq_003` ("can I still get
+that covered?") and `rr_008` ("can I still return it?") are near-identical
+phrasing but landed on different intents (`policy_question` vs
+`return_request`) during the relabeling pass — flagged in both cases' notes,
+not reconciled.
+
+**Known dataset drift, not fixed:** the second eval run (prompt v2, 31/37)
+surfaced that several `complex_case` golden labels were already stale
+against the newly-added prompt
+
 ## Open questions to answer as later phases land
 
 1. Why the approval gate sits where it does, and what it costs in latency
